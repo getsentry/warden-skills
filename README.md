@@ -36,8 +36,8 @@ See the [Warden docs](https://warden.sentry.dev/) for the full remote skill work
 
 ## Contributing
 
-See [CONTRIBUTING.md](CONTRIBUTING.md).
+See [CONTRIBUTING.md](CONTRIBUTING.md). For the local test loop, see [TESTING.md](TESTING.md).
 
 ## License
 
-FSL-1.1-ALv2
+MIT

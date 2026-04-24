@@ -2,13 +2,14 @@
 
 ## Prerequisites
 
-Install the authoring skill:
+Install dependencies:
 
 ```bash
-npx @sentry/dotagents install
+pnpm install                   # Installs @sentry/warden CLI
+pnpx @sentry/dotagents install  # Installs skill-writer into .agents/skills/
 ```
 
-This populates `.agents/skills/` with `skill-writer`. Workflow skills (commit, PR, CI iteration) are installed system-wide and not vendored here.
+Workflow skills (commit, PR, CI iteration) are installed system-wide and not vendored here.
 
 ## Add a New Skill
 
@@ -16,13 +17,13 @@ This populates `.agents/skills/` with `skill-writer`. Workflow skills (commit, P
 
 1. Run `/skill-writer` and describe the domain (e.g., "detects async race conditions in Node.js handlers"). Let it ask clarifying questions.
 
-2. The skill-writer will produce `skills/<skill-name>/SKILL.md` with this shape:
+2. All skills in this repo MUST be prefixed `wrdn-`. The skill-writer will produce `skills/wrdn-<skill-name>/SKILL.md` with this shape:
 
    ```markdown
    ---
-   name: <skill-name>
+   name: wrdn-<skill-name>
    description: One sentence on what this skill detects and when Warden should run it.
-   allowed-tools: Read Grep Glob
+   allowed-tools: Read Grep Glob Bash
    ---
 
    You are an expert in <domain>. You analyze code changes for <specific concern>.
@@ -48,12 +49,11 @@ This populates `.agents/skills/` with `skill-writer`. Workflow skills (commit, P
 
 3. (Optional) Add long-form context under `skills/<skill-name>/references/` and link to it from SKILL.md. Reference files load on demand, so use them for detail the agent only sometimes needs.
 
-4. Test the skill against a real diff before committing:
+4. Test the skill against a real diff. See [TESTING.md](TESTING.md) for the full workflow, including the regression-test-against-a-known-fix pattern. Short version:
 
    ```bash
-   # In a target repo
-   warden add --remote <your-fork>/warden-skills@<branch> --skill <skill-name>
-   warden --skill <skill-name>
+   cd ~/src/sentry  # or any target repo
+   warden --skill ~/src/warden-skills/skills/wrdn-<skill-name>
    ```
 
 5. Open a PR. Include a sample finding the skill produced and a sample case it correctly ignored.

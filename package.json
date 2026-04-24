@@ -1,0 +1,21 @@
+{
+  "name": "@sentry/warden-skills",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Generalized Warden skills for code review",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/getsentry/warden-skills.git"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "packageManager": "pnpm@10.28.0",
+  "scripts": {
+    "warden": "warden"
+  },
+  "devDependencies": {
+    "@sentry/warden": "^0.20.0"
+  }
+}
