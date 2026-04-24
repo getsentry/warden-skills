@@ -1,0 +1,9 @@
+version = 1
+
+[[skills]]
+name = "dotagents"
+source = "getsentry/dotagents"
+
+[[skills]]
+name = "skill-writer"
+source = "getsentry/skills"
