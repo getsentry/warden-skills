@@ -28,6 +28,26 @@ Review the effective graph, not one YAML file. The caller may introduce a privil
 - A local composite action comes from the PR checkout and runs with caller secrets.
 - An otherwise pinned action downloads mutable remote scripts or binaries at runtime and executes them.
 
+## Undeclared Secrets in Reusable Workflows
+
+A reusable workflow defines its secret surface under `on: workflow_call: secrets:`. Any `${{ secrets.X }}` reference inside the workflow that is not declared there (and is not the implicit `GITHUB_TOKEN`) is a hidden contract:
+
+- the workflow only runs when the caller writes `secrets: inherit`, which exposes the entire caller secret bag
+- a future caller that passes secrets explicitly silently breaks
+- reviewers reading the callee cannot see which secrets the workflow needs
+
+Detection signal: grep the reusable workflow for `secrets\.` references and compare against the declared `secrets:` map. Anything missing is a finding. getsentry #19582 (`b7c2a401ba`) fixed exactly this on `select-sentry-tests.yml` by declaring `SENTRY_INTERNAL_APP_PRIVATE_KEY`, `SENTRY_GCP_DEV_WORKLOAD_IDENTITY_POOL`, and `COLLECT_TEST_DATA_SERVICE_ACCOUNT_EMAIL`.
+
+## Missing Permissions in Reusable Workflows
+
+A reusable workflow without a top-level or job-level `permissions:` block inherits whatever the caller granted. That is fine when the callee is a thin trusted helper; it is not fine when the caller routinely grants write scopes the callee does not actually need. getsentry #19634 (`ff221468c1`) added `permissions: {contents: read, id-token: write, pull-requests: read}` to a reusable workflow that previously over-inherited.
+
+Report when the reusable workflow has no `permissions:` block AND the operations inside it (read source, mint OIDC, write a single check, etc.) need a strictly narrower scope than callers commonly grant.
+
+## Cache Eviction and Trust Crossing
+
+GitHub caps each repository's Actions cache at 10 GiB and evicts oldest entries on overflow. An attacker run that stuffs the cache forces eviction of legitimate entries; the same run can then write a poisoned entry under the expected key. The Angular dev-infra compromise (Adnan Khan, 2024) used this technique to land malicious build artifacts in a release job. Trace cache scope across trust boundaries, not just cache contents.
+
 ## Verification Steps
 
 1. Build a small call graph: trigger, caller job, callee workflow/action, scripts, artifact/cache producer and consumer.

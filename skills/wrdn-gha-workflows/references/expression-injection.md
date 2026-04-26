@@ -1,10 +1,10 @@
 # Expression Injection
 
-Use this reference when `${{ }}` expressions appear inside `run:` blocks or composite-action shell steps.
+Use this reference when `${{ }}` expressions appear inside `run:` blocks, composite-action shell steps, `actions/github-script` and `actions/script` `script:` bodies, or any other action input that an interpreter later evaluates.
 
 ## Core Rule
 
-GitHub expression expansion happens before the shell runs. If attacker-controlled context is placed directly in a shell script, the attacker can inject shell syntax.
+GitHub expression expansion happens before the runner reaches the interpreter. If attacker-controlled context is placed directly into a shell, JavaScript, Python, or other code-evaluating field, the attacker injects code, not data. The interpreter does not have to be a shell. `actions/github-script` is a JavaScript `eval` sink. CVE-2026-27701 (LiveCode) shipped exactly that bug.
 
 ## Attacker-Controlled Values
 
@@ -43,10 +43,17 @@ Report when untrusted expressions land in:
 - loops over changed filenames injected through `${{ steps.changed.outputs.files }}`
 - heredocs without safe quoting
 - shell commands composed inside composite actions
-- `bash -c`, `sh -c`, `python -c`, `node -e`
+- `${{ inputs.* }}` interpolated into `run:` inside a composite action whose caller is externally reachable (sentry e93ee1ce, sentry c50c92f9)
+- `bash -c`, `sh -c`, `python -c`, `node -e`, `ruby -e`
+- `actions/github-script` and `actions/script` `script:` bodies that interpolate `${{ x }}` rather than read `process.env.X`
+- `echo "key=${{ x }}" >> $GITHUB_OUTPUT`, `>> $GITHUB_ENV`, `>> $GITHUB_STEP_SUMMARY`, `>> $GITHUB_PATH`; both the shell line and the file format are parsed (getsentry 0898b3d8 fixed this; PR titles, branch names, and `||`-fallback expressions all reach the line)
 - command arguments later passed to `eval`, `exec`, `os.system`, `child_process.exec`, or equivalent
 
-Do not report expression use in `if:` or `with:` by default. They can become dangerous only when the receiving action or later shell step interprets the value as code.
+Do not report expression use in `if:` or `with:` by default. They can become dangerous only when the receiving action or later shell step interprets the value as code. `actions/github-script` is a `with: script:` field, so it is the exception, not the rule.
+
+## TOCTOU on Approval-Then-Checkout
+
+If a comment, label, or other approval gate causes the workflow to resolve `pull_request.head.sha` (or `head_ref`) at execution time, the SHA an attacker pushes between approval and execution is the SHA the privileged job runs. Pinning the checkout to a SHA captured at approval time (encoded in the label, the comment, or a deployment record) closes the window. Calling out the gate in prose without pinning the ref is not a fix.
 
 ## Verification Steps
 

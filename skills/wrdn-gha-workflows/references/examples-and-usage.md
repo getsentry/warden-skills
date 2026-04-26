@@ -89,6 +89,34 @@ Workflow uses `pull_request_target`, checks out fork code, runs an AI coding age
 
 Workflow grants `id-token: write` on PR-reachable jobs and the repo includes a cloud trust policy matching `repo:org/repo:*`. Expected result: finding if untrusted refs can assume the role, or medium confidence if cloud-side binding needs verification.
 
+### Positive: github-script JS injection
+
+Workflow uses `actions/github-script@v7` and concatenates `${{ github.event.issue.title }}` directly into the `script:` body to build a comment. Expected result: medium-or-high finding; the issue title is evaluated as JavaScript inside the action's Node context with the workflow token (CVE-2026-27701 shape). Fix is `env:` plus `process.env.X`.
+
+### Positive: ArtiPACKED artifact upload
+
+Workflow checks out the repo without `persist-credentials: false`, builds, then runs `actions/upload-artifact@v4` with `path: .`. Expected result: medium or high finding citing ArtiPACKED; the persisted `GITHUB_TOKEN` from `.git/config` is included in a public-readable artifact.
+
+### Positive: undeclared reusable-workflow secret
+
+Reusable workflow with `on: workflow_call:` and no `secrets:` map, but `${{ secrets.DEPLOY_KEY }}` referenced inside a job. Caller uses `secrets: inherit`. Expected result: medium finding; the secret surface is invisible from the callee, future explicit-secrets callers break, and inheriting bag-of-secrets is broader than the callee needs.
+
+### Positive: TOCTOU on /ok-to-test
+
+Workflow uses `issue_comment`, gates on `author_association == 'MEMBER'` and a `/ok-to-test` body match, then `actions/checkout` with `ref: ${{ github.event.pull_request.head.sha }}` and runs deploy with `id-token: write`. Expected result: high finding; the head SHA at job start is not the SHA the maintainer reviewed. Fix is to pin to a SHA captured at approval time.
+
+### Positive: third-party action on a mutable ref in a release job
+
+Workflow runs on `release: published`, has `permissions: {contents: write, packages: write, id-token: write}`, and includes `uses: some-org/release-helper@v2`. Expected result: high finding; `@v2` is a mutable tag, the job mints OIDC and publishes packages, and the tj-actions/changed-files compromise (CVE-2025-30066) demonstrated this exact takeover path. Fix is to pin to a 40-character SHA.
+
+### Negative: third-party action on tag in read-only public flow
+
+Workflow runs on `pull_request`, has `permissions: read-all` (or `contents: read`), no `secrets.*` other than `GITHUB_TOKEN`, and uses `actions/checkout@v4` plus a third-party linter on `@v3`. Expected result: no supply-chain finding; the job holds no exploitable credentials.
+
+### Negative: first-party action on tag
+
+Workflow uses `actions/checkout@v4` and `actions/setup-node@v4` in a privileged release job. Expected result: no supply-chain finding; first-party `actions/*` references on a tag are not in scope.
+
 ### Lower confidence: mutable action ref
 
-Security-critical release workflow uses a third-party action pinned to `@main`, but no external attacker can modify the workflow or action source. Expected result: low only if adjacent to another traced workflow risk, otherwise do not report.
+Workflow that handles no secrets, holds no write tokens, and operates only on public read-only data uses a third-party action pinned to `@main`. Expected result: low only if adjacent to another traced workflow risk, otherwise do not report.

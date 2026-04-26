@@ -36,6 +36,31 @@ Report when the credential is reachable from attacker-controlled execution or fr
 
 GitHub masks exact configured secret values in logs. It does not reliably mask transformed values such as base64-encoded, truncated, split, URL-encoded, or archived secrets. Treat those as leaks when an attacker can read logs or artifacts.
 
+## ArtiPACKED: Checkout Credentials in Uploaded Artifacts
+
+`actions/checkout` writes the `GITHUB_TOKEN` (and on some runners `ACTIONS_RUNTIME_TOKEN`) into `.git/config` for credential persistence. A later `actions/upload-artifact` whose `path:` includes `.git/` ships the token off the runner. On a public repository the artifact is world-readable; the token's lifetime is the workflow run, but that is enough to push code, open and merge PRs, or hand off to a longer-lived credential.
+
+High-signal indicators:
+
+- `actions/upload-artifact` `path:` is `.`, `./`, `${{ github.workspace }}`, the repository root, or any glob that does not exclude `.git/`
+- the prior `actions/checkout` step did not set `persist-credentials: false`
+- artifact upload of a directory that received `git config --local credential.helper` writes, `~/.docker/config.json` after a registry login, `~/.npmrc` after `npm login` or `setup-node` writes, or `~/.gitconfig` after credential helper writes
+
+Fix patterns:
+
+- set `persist-credentials: false` on every `actions/checkout` whose work product later gets uploaded
+- upload only the build output directory, not the workspace
+- treat `.git/`, `~/.docker/config.json`, `~/.npmrc`, `~/.gitconfig`, and `~/.aws/credentials` as denylisted from artifact uploads
+
+## Cache Trust Boundaries
+
+Caches are cross-job storage. Two shapes recur:
+
+- A `pull_request` workflow writes a cache the privileged `workflow_run`/`push`/`release` workflow later restores. The privileged job is now executing or trusting attacker-supplied content. Either the cache scope must be partitioned by trust (different keys, different scopes, or no shared scope at all), or the privileged job must validate the restored data before using it.
+- An attacker run stuffs the 10 GiB GitHub-imposed cache scope to evict legitimate entries, then writes a poisoned replacement under the expected key. The Angular dev-infra compromise documented by Adnan Khan used this exact pattern: an unprivileged job poisoned a cache that a release job restored. Cache eviction is a feature, not a bug; relying on a cache key being "the one we wrote" is wrong.
+
+Validate cache contents before using them in privileged jobs, or do not share cache scope across trust boundaries.
+
 ## OIDC Trust Boundaries
 
 `id-token: write` lets a workflow mint an OIDC token. The cloud-side trust policy decides whether that token can assume a role. A workflow is risky when untrusted refs can satisfy the trust policy.
