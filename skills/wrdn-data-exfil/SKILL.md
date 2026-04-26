@@ -12,7 +12,7 @@ The abstract shape is constant across languages:
 untrusted source ──▶ (missing validation / unsafe API) ──▶ data-disclosure sink
 ```
 
-This skill covers the exfiltration half. Server-side code execution (command injection, deserialization RCE, SSTI, eval sinks) is in `wrdn-code-execution`. Some primitives straddle both — SSRF can pivot from data read to IAM credential theft to RCE; XXE can read files or reach gadget chains. This skill focuses on cases where the primary impact is data leaving a boundary.
+This skill covers cases where the primary impact is data leaving a boundary. Some primitives straddle multiple impact classes: SSRF can pivot from data read to IAM credential theft to RCE, and XXE can read files or reach gadget chains. Report here only when the data-exfiltration path is concrete.
 
 ## Trace. Do Not Skim.
 
@@ -99,7 +99,7 @@ Real: tarfile CVE-2007-4559, jszip CVE-2022-48285, node-static CVE-2023-26111.
 - Mongoose `populate({match: userObj})` (CVE-2025-23061), unsanitized request-body objects as Mongo filters, `$where` with user string.
 - Postgres JSON-operator splicing: `SELECT data -> '${userKey}' FROM ...`.
 
-Access-control bypass via SQL (returning someone else's row) belongs in `wrdn-access-control` unless the *injection itself* is the enabler.
+Authorization bypass via SQL, such as returning another user's row, is out of scope unless injection itself is the enabler.
 
 ### XXE (file-read and SSRF angle)
 
@@ -126,10 +126,8 @@ Access-control bypass via SQL (returning someone else's row) belongs in `wrdn-ac
 
 ## What NOT to Report
 
-Belongs to other skills:
-
-- **Code execution** (command injection, deserialization RCE, SSTI, eval, prototype-pollution reaching code sink): `wrdn-code-execution`.
-- **Access control** (authn bypass, authz flaws, IDOR via straightforward missing scoping): `wrdn-access-control`. Flag here only when a bulk-exfil primitive (mass query, enumeration via IDOR) is enabled.
+- **Code execution** (command injection, deserialization RCE, SSTI, eval, prototype-pollution reaching code sink).
+- **Authorization** (IDOR via straightforward missing scoping, tenant or role boundary failures). Flag here only when a bulk-exfil primitive, such as a mass query or enumeration via IDOR, is enabled.
 - **XSS**, **CSRF**, **crypto primitive misuse**, **secrets hard-coded in source**, **transport security**.
 - **DoS / ReDoS** unless it produces a data-exfil primitive (timing-based NoSQL `$where` oracle).
 - **Dependency CVEs** as a class.
@@ -147,7 +145,7 @@ Belongs to other skills:
 9. **Error handler returning `{"error": "internal"}`** with separate server-side log is the safe shape.
 10. **Sentry callers that go through `safe_urlopen` / `safe_urlread`** already pass through the IP check chain.
 11. **Prisma tagged-template `$queryRaw`** parameterizes automatically.
-12. **Principal-derived IDs** (`WHERE user_id = request.user.id`) are not IDOR — access-control concern, not exfil.
+12. **Principal-derived IDs** (`WHERE user_id = request.user.id`) are not IDOR; they are an authorization concern, not exfil.
 
 ## Canonical Patterns
 

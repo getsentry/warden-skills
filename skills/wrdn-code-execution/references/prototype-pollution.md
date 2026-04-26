@@ -117,7 +117,7 @@ See `references/sql-injection.md` for operator-injection (`$where`, `$ne`) which
 
 Python has no prototype concept in the JavaScript sense. The equivalent class is **class-attribute pollution** via `setattr(obj, user_key, value)` or `obj.__class__.something`. Rare in practice but surfaces in:
 
-- Mass assignment into ORM models (see `wrdn-access-control`).
+- Mass assignment into ORM models unless polluted fields reach a code-execution sink.
 - `setattr(django.conf.settings, user_key, value)` — never do this.
 
 Treat this file as JS-primary.

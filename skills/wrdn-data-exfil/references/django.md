@@ -1,6 +1,6 @@
 # Django Data-Exfiltration Reference
 
-Load when the diff touches Django views, DRF serializers, raw ORM queries, file responses, or settings that affect debug output. For SSTI and pickle session config (code-execution angle), see `wrdn-code-execution/references/django.md`.
+Load when the diff touches Django views, DRF serializers, raw ORM queries, file responses, or settings that affect debug output. Ignore SSTI and pickle session config unless they expose data.
 
 ## DEBUG and Settings Leakage
 

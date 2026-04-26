@@ -1,6 +1,6 @@
 # Django Code-Execution Reference
 
-Load when the diff touches Django templates, session/cache config, or admin-facing config loading. For raw SQL, DRF serializer leakage, and file/path concerns, see `wrdn-data-exfil/references/django.md`.
+Load when the diff touches Django templates, session/cache config, or admin-facing config loading. Ignore raw SQL, DRF serializer leakage, and file/path concerns unless they reach code execution.
 
 ## Templates
 

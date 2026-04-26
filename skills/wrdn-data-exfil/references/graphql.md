@@ -1,6 +1,6 @@
 # GraphQL RCE / Exfil Reference
 
-Load when the diff touches GraphQL schema, resolvers, federation, introspection config, or debug-mode config. The access-control angle (resolver-level authorization) lives in `wrdn-access-control/references/graphql.md`; this file covers the exfil-through-schema angle.
+Load when the diff touches GraphQL schema, resolvers, federation, introspection config, or debug-mode config. This file covers the exfil-through-schema angle.
 
 ## Introspection in Production
 
@@ -106,7 +106,7 @@ const resolvers = {
 
 Federation gateways invoke `__resolveReference` for any entity reference a client constructs. No visit-query-first gate. Without per-entity scoping, this is an IDOR / exfil primitive across the federated graph.
 
-See CVE-2025-64530 (interface directive propagation) and GHSA-m8jr-fxqx-8xx6 (`@requires` / `@fromContext` transitive fields) in `wrdn-access-control/references/graphql.md`.
+CVE-2025-64530 (interface directive propagation) and GHSA-m8jr-fxqx-8xx6 (`@requires` / `@fromContext` transitive fields) are relevant when they expose fields or objects across a data boundary.
 
 ## DataLoader Scope
 

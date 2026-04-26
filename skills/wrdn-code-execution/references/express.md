@@ -1,6 +1,6 @@
 # Express / Node Code-Execution Reference
 
-Load when the diff touches `child_process`, `vm`, `Function`, template engines, dynamic `require`, or deep merges of user-controlled objects in Express, Koa, Fastify, Hono, or Elysia handlers. For SSRF, file serving, response leaks, see `wrdn-data-exfil/references/express.md`.
+Load when the diff touches `child_process`, `vm`, `Function`, template engines, dynamic `require`, or deep merges of user-controlled objects in Express, Koa, Fastify, Hono, or Elysia handlers. Ignore SSRF, file serving, and response leaks unless they reach code execution.
 
 ## Subprocess
 

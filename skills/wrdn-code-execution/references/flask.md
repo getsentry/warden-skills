@@ -1,6 +1,6 @@
 # Flask Code-Execution Reference
 
-Load when the diff touches Flask templates, the Werkzeug debugger, or config-loading paths. For path traversal, error-page leakage, and request-body logging, see `wrdn-data-exfil/references/flask.md`.
+Load when the diff touches Flask templates, the Werkzeug debugger, or config-loading paths. Ignore path traversal, error-page leakage, and request-body logging unless they reach code execution.
 
 ## SSTI — Flask Is the Canonical Shape
 
@@ -39,7 +39,7 @@ app.config["DEBUG"] = True
 app.config["DEBUG"] = os.environ.get("FLASK_ENV") == "development"
 ```
 
-The data-exfil angle (verbose stack traces) lives in the other skill; the RCE angle is `/console`.
+Verbose stack traces are not enough here; the RCE angle is `/console`.
 
 ## Config Loading
 

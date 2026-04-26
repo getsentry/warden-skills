@@ -12,7 +12,7 @@ The abstract shape is constant across languages:
 untrusted source ──▶ (missing validation / unsafe API) ──▶ code-execution sink
 ```
 
-This skill covers the code-execution half. Data exfiltration (SSRF, path traversal, SQL injection, response leakage) is in `wrdn-data-exfil`. Some sinks straddle both (XXE → file read or RCE; cmd injection can exfil via `curl $(cat /etc/passwd)`) — this skill focuses on cases where the primary impact is arbitrary code or commands executing.
+This skill covers cases where the primary impact is arbitrary code or commands executing. Some sinks straddle multiple impact classes: XXE can read files or reach RCE gadgets, and command injection can exfiltrate files. Report here only when the code-execution path is concrete.
 
 ## Trace. Do Not Skim.
 
@@ -119,7 +119,7 @@ Real: CVE-2025-55182 (Next.js React2Shell), every vm2 CVE, every Spring4Shell li
 
 ### XXE with RCE gadgets
 
-XXE is primarily a data-exfil concern (`wrdn-data-exfil` covers the file-read and SSRF angles). The RCE branch:
+XXE is usually a file-read or SSRF issue. Report the RCE branch here only when the stack exposes code-loading or gadget execution:
 
 - Java XXE → classloader gadgets or JNDI lookup paths. `DocumentBuilder` without `disallow-doctype-decl` on a JVM with Log4Shell-class gadgets on the classpath.
 - XSLT extensions that invoke system calls (`xsl:invoke-java`, legacy PHP `XSL` extensions).
@@ -128,10 +128,8 @@ Most XXE finds file exfiltration; flag the RCE branch when the stack is Java wit
 
 ## What NOT to Report
 
-Belongs to other skills:
-
-- **Data exfiltration** (SSRF, path traversal, SQL/NoSQL injection enabling bulk reads, response field leakage): `wrdn-data-exfil`.
-- **Access control** (authn bypass, authz flaws, IDOR, mass assignment enabling role elevation): `wrdn-access-control`.
+- **Data exfiltration** (SSRF, path traversal, SQL/NoSQL injection enabling bulk reads, response field leakage).
+- **Authorization** (IDOR, missing ownership checks, role or tenant escalation, mass assignment enabling role elevation).
 - **XSS**, **CSRF**, **crypto primitive misuse**, **secrets in source**, **transport security**.
 - **DoS** / **ReDoS** unless it directly enables a code-execution sink.
 - **Dependency CVEs** as a class.
@@ -146,7 +144,7 @@ Belongs to other skills:
 6. **`ast.literal_eval`** is safe; parses literals without executing.
 7. **`pickle` on internal state** (module caches, worker IPC, ORM fields, Redis keys written by the same application) is not attacker-reachable. Sentry does this in `arroyo`, `buffer/redis`, `gzippeddict`. Confirm the source is internal before flagging.
 8. **Template source from `readFileSync('views/x.hbs')`** is safe. Only user-controlled template source is SSTI.
-9. **`Prisma.$queryRaw\`...\`** (tagged template) is not an eval sink. The SQL-injection concern belongs in `wrdn-data-exfil`.
+9. **`Prisma.$queryRaw\`...\`** (tagged template) is not an eval sink. Treat SQL injection as out of scope unless it reaches code execution.
 
 ## Canonical Patterns
 

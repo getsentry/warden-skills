@@ -11,7 +11,7 @@ Getsentry is the commercial layer. It adds:
 - Plan-based feature entitlement
 - `UserPermissions` enum for staff-only actions
 
-The access-control surface is wider than OSS Sentry because billing data, subscription mutation, and staff actions all have their own gates.
+The authorization surface is wider than OSS Sentry because billing data, subscription mutation, and staff actions all have their own gates.
 
 ## Billing Permission Classes
 

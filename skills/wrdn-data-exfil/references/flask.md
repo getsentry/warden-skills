@@ -1,6 +1,6 @@
 # Flask Data-Exfiltration Reference
 
-Load when the diff touches Flask file serving, error handlers, request-body logging, or static-file delivery. For SSTI, Werkzeug debugger RCE, and `from_pyfile` (code-execution angle), see `wrdn-code-execution/references/flask.md`.
+Load when the diff touches Flask file serving, error handlers, request-body logging, or static-file delivery. Ignore SSTI, Werkzeug debugger RCE, and `from_pyfile` unless they expose data.
 
 ## File Serving
 

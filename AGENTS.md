@@ -16,7 +16,7 @@ Warden discovers skills at `skills/<name>/SKILL.md` automatically. No registry f
 
 ## Naming
 
-Every skill in this repo MUST be prefixed `wrdn-`. The prefix keeps these skills identifiable when mixed with skills from other sources in a consumer's `warden.toml` (e.g., `wrdn-access-control`, `wrdn-dependency-audit`). The frontmatter `name` must match the directory exactly, prefix included.
+Every skill in this repo MUST be prefixed `wrdn-`. The prefix keeps these skills identifiable when mixed with skills from other sources in a consumer's `warden.toml` (e.g., `wrdn-authz`, `wrdn-dependency-audit`). The frontmatter `name` must match the directory exactly, prefix included.
 
 ## Tooling
 

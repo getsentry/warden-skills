@@ -61,7 +61,7 @@ return tmpl.render(body=request.args["body"])
 return Markup(user_input)  # Disables autoescape. Not SSTI but XSS; parallel concern.
 ```
 
-Not this skill's concern directly; flag via `wrdn-xss` when it exists.
+Not this skill's concern directly; ignore unless it reaches server-side template execution.
 
 ## Handlebars (Node)
 

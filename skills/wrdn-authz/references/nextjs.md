@@ -85,7 +85,7 @@ Matcher regex has historical footguns:
 
 ### 1. Page-level auth, action without auth
 
-Already covered above. This is the #1 Next.js access-control bug in the App Router era.
+Already covered above. This is the #1 Next.js authorization bug in the App Router era.
 
 ### 2. Route handler added at `app/api/foo/route.ts` without auth
 

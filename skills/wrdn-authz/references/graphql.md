@@ -17,7 +17,7 @@ Examples of the principle in action:
 
 ### CVE-2025-64530 — Apollo Federation interface directive propagation
 
-Access-control directives on an *interface* type were not propagated to implementing types. Querying via inline fragment on the concrete type bypassed the check.
+Authorization directives on an *interface* type were not propagated to implementing types. Querying via inline fragment on the concrete type bypassed the check.
 
 ```graphql
 interface Sensitive @requiresScopes(scopes: [["admin"]]) {
@@ -31,13 +31,13 @@ type Secret implements Sensitive {
 # Query: `{ secretOne { ... on Secret { value } } }` bypassed the interface's directive.
 ```
 
-Detection: when `@authenticated`, `@requiresScopes`, or any custom access-control directive is applied to an interface or union, check that either (a) the server version handles propagation, or (b) the directive is duplicated on each implementing type.
+Detection: when `@authenticated`, `@requiresScopes`, or any custom authorization directive is applied to an interface or union, check that either (a) the server version handles propagation, or (b) the directive is duplicated on each implementing type.
 
 ### GHSA-m8jr-fxqx-8xx6 — Apollo Federation `@requires` / `@fromContext`
 
 Transitive fields fetched from subgraphs were not re-checked against their own `@authenticated` / `@requiresScopes`. A field referenced via `@requires` could leak to a subgraph that doesn't have the scopes to read it.
 
-Detection: `@requires` or `@fromContext` on a field whose target has an access-control directive.
+Detection: `@requires` or `@fromContext` on a field whose target has an authorization directive.
 
 ### Relay `Query.node(id: ID!)` global lookup
 
@@ -149,7 +149,7 @@ ssn: (parent, _, ctx) => {
 const server = new ApolloServer({ typeDefs, resolvers, introspection: true });
 ```
 
-Not directly an access-control bypass, but exposes the schema (mutation and query surface) to unauthenticated callers, making reconnaissance trivial. When paired with a missing resolver-level guard, it accelerates exploitation.
+Not directly an authorization bypass, but exposes the schema (mutation and query surface) to unauthenticated callers, making reconnaissance trivial. When paired with a missing resolver-level guard, it accelerates exploitation.
 
 ### 7. Custom directive with a silent fail-open
 
@@ -175,7 +175,7 @@ The `if (!scopes) return next()` branch is the bug. Scopes not loaded should be 
 ## Diff Heuristics
 
 1. **New resolver that loads by ID from `args` without scoping by `ctx.user`.**
-2. **New `@auth` or custom access-control directive on an interface or union** — verify propagation.
+2. **New `@auth` or custom authorization directive on an interface or union** — verify propagation.
 3. **New `__resolveReference` for a federated entity without scoping.**
 4. **New DataLoader created at module scope** instead of per-request.
 5. **New mutation that does `ctx.user ? ok : deny` only**, without ownership.

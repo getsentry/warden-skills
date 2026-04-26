@@ -1,6 +1,6 @@
 # Sentry Code-Execution Reference
 
-Load when the diff imports from `sentry.utils.yaml`, `sentry.runner`, integration parsers, or webhook handlers. Covers the code-execution-angle of Sentry's sink surfaces. For SSRF, response-field leakage, and XXE in Sentry, see `wrdn-data-exfil/references/sentry.md`.
+Load when the diff imports from `sentry.utils.yaml`, `sentry.runner`, integration parsers, or webhook handlers. Covers the code-execution angle of Sentry's sink surfaces. Ignore SSRF, response-field leakage, and XXE unless they reach code execution.
 
 Sentry has hardened its RCE surface deliberately: YAML defaults to `SafeLoader`, pickle is confined to internal state, `eval` is CLI-only. Most live risk is new code that bypasses these conventions.
 

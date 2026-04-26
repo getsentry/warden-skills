@@ -120,7 +120,7 @@ A new session flow that has no absolute expiration is a finding when the product
 
 ## Login Rate Limiting (Related, Not Strictly Access-Control)
 
-Missing rate limiting on login is traditionally a DoS + credential-stuffing concern. It becomes access-control when combined with:
+Missing rate limiting on login is traditionally a DoS + credential-stuffing concern. It becomes authorization when combined with:
 
 - Account lockout that can be triggered for arbitrary users (DoS via lockout).
 - Password-reset flows that leak outstanding tokens.

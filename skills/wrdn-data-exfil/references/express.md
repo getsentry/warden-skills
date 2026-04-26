@@ -1,6 +1,6 @@
 # Express / Node Data-Exfiltration Reference
 
-Load when the diff touches Express, Koa, Fastify, Hono, or Elysia routes that serve files, fetch URLs, return ORM rows, or handle errors. For `child_process`, `vm`/`Function`/`eval`, template engines, and `node-serialize` (code-execution angle), see `wrdn-code-execution/references/express.md`.
+Load when the diff touches Express, Koa, Fastify, Hono, or Elysia routes that serve files, fetch URLs, return ORM rows, or handle errors. Ignore `child_process`, `vm`/`Function`/`eval`, template engines, and `node-serialize` unless they expose data.
 
 ## File Serving
 
@@ -88,7 +88,7 @@ catch (err) {
 
 ## Body-Parser and `qs`
 
-`express.urlencoded({ extended: true })` uses `qs`. `?a[__proto__][isAdmin]=true` parses to a polluting object. Combined with downstream merges, prototype pollution lands. The pollution → sink chain belongs in `wrdn-code-execution/references/prototype-pollution.md`; the data-exfil angle is when polluted properties are echoed back in responses or logged.
+`express.urlencoded({ extended: true })` uses `qs`. `?a[__proto__][isAdmin]=true` parses to a polluting object. Combined with downstream merges, prototype pollution lands. The data-exfil angle is when polluted properties are echoed back in responses or logged.
 
 `bodyParser.json({ strict: true })` rejects non-object/array top-level JSON — small defense against payload shape attacks.
 

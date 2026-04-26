@@ -2,7 +2,7 @@
 
 Load when the diff touches raw query APIs, ORM escape hatches, or operator-valued query fragments: Django `raw()`/`extra()`/`RawSQL`, SQLAlchemy `text()`, Sequelize `literal`/`query`, Prisma `$queryRawUnsafe`/`$executeRawUnsafe`, Mongoose `populate({match})`, Mongo `$where`/`$regex`, or string-concat into cursor `execute()`.
 
-Scope in this skill: injection that produces bulk data exfiltration or write-amplification. Access-control bypass via SQL (e.g., returning another user's row) is this skill only when the injection itself is the enabler; direct missing-scope queries without injection belong in `wrdn-access-control`.
+Scope in this skill: injection that produces bulk data exfiltration or write-amplification. Authorization bypass via SQL, such as returning another user's row, is in scope only when injection itself is the enabler. Direct missing-scope queries without injection are out of scope.
 
 ## The Core Rule
 

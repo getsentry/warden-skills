@@ -1,6 +1,6 @@
 # Next.js Code-Execution Reference
 
-Load when the diff touches Server Actions or Server Components that reach `eval`/`Function`/`vm`, dynamic `require`/`import`, or any code-evaluation primitive on the server side. For Server Actions SSRF, image proxy, RSC field leakage, see `wrdn-data-exfil/references/nextjs.md`.
+Load when the diff touches Server Actions or Server Components that reach `eval`/`Function`/`vm`, dynamic `require`/`import`, or any code-evaluation primitive on the server side. Ignore Server Actions SSRF, image proxy, and RSC field leakage unless they reach code execution.
 
 ## CVE-2025-55182 — React2Shell
 

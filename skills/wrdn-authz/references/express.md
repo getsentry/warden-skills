@@ -143,7 +143,7 @@ app.use(cors({ origin: true, credentials: true }));
 // "true" means: echo the Origin header. Every origin is allowed with credentials.
 ```
 
-This makes CSRF a full-access-control bypass. Flag when `origin: true` combines with `credentials: true`.
+This makes CSRF a full-authorization bypass. Flag when `origin: true` combines with `credentials: true`.
 
 ## Framework-Specific Notes
 

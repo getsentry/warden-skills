@@ -37,15 +37,15 @@ Work on `skills/<name>/SKILL.md` in this repo. Then, in the target repo:
 cd ~/src/sentry
 
 # Analyze uncommitted changes
-warden --skill ~/src/warden-skills/skills/wrdn-access-control
+warden --skill ~/src/warden-skills/skills/wrdn-authz
 
 # Analyze a ref range
-warden --skill ~/src/warden-skills/skills/wrdn-access-control HEAD~1..HEAD
-warden --skill ~/src/warden-skills/skills/wrdn-access-control main..HEAD
+warden --skill ~/src/warden-skills/skills/wrdn-authz HEAD~1..HEAD
+warden --skill ~/src/warden-skills/skills/wrdn-authz main..HEAD
 
 # Analyze specific files or globs
-warden --skill ~/src/warden-skills/skills/wrdn-access-control src/sentry/api/bases/organization.py
-warden --skill ~/src/warden-skills/skills/wrdn-access-control 'src/sentry/api/**/*.py'
+warden --skill ~/src/warden-skills/skills/wrdn-authz src/sentry/api/bases/organization.py
+warden --skill ~/src/warden-skills/skills/wrdn-authz 'src/sentry/api/**/*.py'
 ```
 
 Edits to SKILL.md and `references/*.md` in this repo are live on the next run.
@@ -56,7 +56,7 @@ Edits to SKILL.md and `references/*.md` in this repo are live on the next run.
 
 Every skill should be able to re-detect at least one real historical bug. This is the most valuable test you own: if an edit to the skill makes it miss a bug the skill used to catch, the skill is worse, regardless of what a synthetic fixture says.
 
-Pick a known access-control fix in Sentry (for example, `cf341c9c950` — "fix(releases): Validate project access in release details"), check out the commit *before* the fix, and run the skill:
+Pick a known authorization fix in Sentry (for example, `cf341c9c950` — "fix(releases): Validate project access in release details"), check out the commit *before* the fix, and run the skill:
 
 ```bash
 cd ~/src/sentry
@@ -64,7 +64,7 @@ cd ~/src/sentry
 # The pre-fix state contains the IDOR
 git checkout cf341c9c950~1 -- src/sentry/releases/endpoints/organization_release_details.py
 
-warden --skill ~/src/warden-skills/skills/wrdn-access-control \
+warden --skill ~/src/warden-skills/skills/wrdn-authz \
   src/sentry/releases/endpoints/organization_release_details.py
 
 # Expect: high-severity finding describing the unscoped project lookup.
@@ -75,7 +75,7 @@ git checkout HEAD -- src/sentry/releases/endpoints/organization_release_details.
 
 Keep a small list of these "ground truth" commits in your head (or in a scratch file alongside the skill). Run the full set after any non-trivial SKILL.md edit.
 
-Good candidates for `wrdn-access-control`: `cf341c9c950`, `681d46fef66`, `fb21d886a08`, `b9ea4f87297`. The `references/sentry.md` file lists more, each with a one-line summary of the bug the fix closed.
+Good candidates for `wrdn-authz`: `cf341c9c950`, `681d46fef66`, `fb21d886a08`, `b9ea4f87297`. The `references/sentry.md` file lists more, each with a one-line summary of the bug the fix closed.
 
 ## Single-File Mode From Anywhere
 
@@ -83,7 +83,7 @@ You don't strictly have to `cd` to the target. Absolute or relative paths outsid
 
 ```bash
 cd ~/src/warden-skills
-warden --skill ./skills/wrdn-access-control \
+warden --skill ./skills/wrdn-authz \
   ~/src/sentry/src/sentry/api/bases/organization.py
 ```
 
@@ -94,10 +94,10 @@ warden --skill ./skills/wrdn-access-control \
 Warden passes the skill's directory to the agent via `skill.rootDir`. Inside SKILL.md, reference files are loaded on demand:
 
 ```markdown
-See `${CLAUDE_SKILL_ROOT}/references/sentry.md` when the diff touches sentry.api.
+See `references/sentry.md` when the diff touches sentry.api.
 ```
 
-The agent resolves `${CLAUDE_SKILL_ROOT}` to the directory containing SKILL.md. When you `--skill <path>`, this resolves to your path. References load correctly without any extra setup.
+Warden resolves bundled reference paths relative to the directory containing `SKILL.md`. When you `--skill <path>`, references load correctly without any extra setup.
 
 If the agent does not open a reference you expected it to, the reference table in SKILL.md is not precise enough. Tighten the "when to read" column.
 

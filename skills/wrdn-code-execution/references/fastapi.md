@@ -1,6 +1,6 @@
 # FastAPI Code-Execution Reference
 
-Load when the diff touches Jinja2 template rendering, `BackgroundTasks` invoking subprocess, WebSocket message handlers that deserialize, or any `eval`/`exec` reach. For response-model leakage, file serving, and SSRF, see `wrdn-data-exfil/references/fastapi.md`.
+Load when the diff touches Jinja2 template rendering, `BackgroundTasks` invoking subprocess, WebSocket message handlers that deserialize, or any `eval`/`exec` reach. Ignore response-model leakage, file serving, and SSRF unless they reach code execution.
 
 ## Jinja2Templates
 

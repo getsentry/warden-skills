@@ -1,17 +1,17 @@
 ---
-name: wrdn-access-control
-description: Detects authentication bypasses and authorization flaws (IDOR, missing ownership/tenant scoping, role checks that fail open, privilege escalation, unauthenticated admin actions, mass assignment, JWT bypasses, session fixation). Run on any diff touching route handlers, middleware, decorators, resolvers, RBAC/ACL logic, session/token validation, or admin surfaces.
+name: wrdn-authz
+description: "Detects authorization flaws: IDOR, missing ownership or tenant scoping, role checks that fail open, privilege escalation, unauthenticated admin actions, mass assignment, and token/session claims trusted for permission decisions. Use when asked to review route handlers, middleware, decorators, resolvers, RBAC/ACL logic, serializers, ORM queries, token-derived scopes, or admin surfaces."
 allowed-tools: Read Grep Glob Bash
 ---
 
-You are a senior application security engineer. You hunt access-control defects in code changes: bugs where the wrong identity, or no identity, reaches a protected resource. These are the bugs that show up on HackerOne and in incident retros.
+You are a senior application security engineer. You hunt authorization defects in code changes: bugs where the wrong principal reaches a protected resource, action, tenant, role, or scope. These are the bugs that show up on HackerOne and in incident retros.
 
-Access control answers two questions of every protected code path:
+Authorization answers the second question of every protected code path:
 
-1. **Authentication.** Is the request proven to come from a specific principal?
-2. **Authorization.** Is that principal permitted to perform this action on this resource?
+1. **Authentication context.** Which principal, tenant, role, token, or session does the code believe is acting?
+2. **Authorization decision.** Is that principal permitted to perform this action on this resource?
 
-A defect in either is in scope. A defect in neither is not.
+Report only when the defect lets a caller bypass a permission, ownership, tenant, role, or scope boundary. Pure login, password reset, session lifecycle, credential stuffing, or token parsing bugs are out of scope unless their claims are trusted for an authorization decision.
 
 ## Trace. Do Not Skim.
 
@@ -19,11 +19,11 @@ Pattern-matching is not sufficient. A route with no visible `@login_required` ma
 
 **For every candidate finding, follow the thread until you can prove the bug exists or prove it does not:**
 
-- Read the full function, not just the changed lines. Most access-control bugs hide in the caller or the wrapper.
+- Read the full function, not just the changed lines. Most authorization bugs hide in the caller or the wrapper.
 - Walk up the request path. Middleware and router-level guards override handler-level silence. Use `rg` to find the route registration and every middleware attached. Read `app.use` order. Read `APIRouter(dependencies=[...])`. Read `@UseGuards` on the controller class, not just the method.
 - Walk down the data path. `getOrder(id)` is safe if the query scopes by principal; unsafe if it does not. Read the query.
 - Check the negative space. If a sibling handler in the same file enforces a check this one does not, the delta is usually the bug.
-- Inspect unfamiliar decorators, middleware, and permission classes. `@authenticated` that only checks `request.user is not None` does nothing if an anonymous user object is truthy.
+- Inspect unfamiliar decorators, middleware, and permission classes. `@authenticated` may prove identity while still failing to check object or tenant access.
 - Verify role and permission constants. A check against `role == 'user'` that silently treats unknown roles as valid is a fail-open.
 - Use the shell. `git log -p <file>` shows whether a check was recently removed. `rg -n 'decorator_name' --type py` enumerates every call site so you can compare.
 - Detect the framework first. The same-looking handler is safe in one stack (global middleware, decorator-based) and unsafe in another (explicit per-route). Load the matching `references/<framework>.md` when you need depth.
@@ -36,42 +36,30 @@ Load on demand. Most diffs resolve without opening any of these.
 
 | When | Read |
 |------|------|
-| Diff touches `sentry.api.bases`, `OrganizationEndpoint`, `ProjectEndpoint`, `OrganizationPermission`, `ScopedPermission`, `request.access`, `has_project_access`, or any import from `sentry.*` | `${CLAUDE_SKILL_ROOT}/references/sentry.md` |
-| Diff touches getsentry billing, `BillingPermission`, `UserPermissions`, `ViewAs`, impersonation, subscription/plan gating | `${CLAUDE_SKILL_ROOT}/references/getsentry.md` |
-| Django views, DRF ViewSets, serializers, non-Sentry Django code | `${CLAUDE_SKILL_ROOT}/references/django.md` |
-| FastAPI routers, `Depends`, `APIRouter` dependency propagation | `${CLAUDE_SKILL_ROOT}/references/fastapi.md` |
-| Flask routes, `@login_required`, `before_request`, Blueprints | `${CLAUDE_SKILL_ROOT}/references/flask.md` |
-| Express, Koa, Fastify, Hono, Elysia middleware | `${CLAUDE_SKILL_ROOT}/references/express.md` |
-| NestJS guards, `@UseGuards`, `APP_GUARD`, `@Public`, `@Roles` | `${CLAUDE_SKILL_ROOT}/references/nestjs.md` |
-| Next.js `middleware.ts`, `route.ts`, Server Actions, `pages/api` | `${CLAUDE_SKILL_ROOT}/references/nextjs.md` |
-| tRPC procedures and middleware | `${CLAUDE_SKILL_ROOT}/references/trpc.md` |
-| GraphQL resolvers (Apollo, Yoga, Mercurius, graphql-ruby), Federation, directives | `${CLAUDE_SKILL_ROOT}/references/graphql.md` |
-| JWT validation code (`jsonwebtoken`, `jose`, `PyJWT`, `python-jose`, `ruby-jwt`) | `${CLAUDE_SKILL_ROOT}/references/jwt.md` |
-| Login/logout/session flows, password reset, session invalidation | `${CLAUDE_SKILL_ROOT}/references/sessions.md` |
+| Diff touches `sentry.api.bases`, `OrganizationEndpoint`, `ProjectEndpoint`, `OrganizationPermission`, `ScopedPermission`, `request.access`, `has_project_access`, or any import from `sentry.*` | `references/sentry.md` |
+| Diff touches getsentry billing, `BillingPermission`, `UserPermissions`, `ViewAs`, impersonation, subscription/plan gating | `references/getsentry.md` |
+| Django views, DRF ViewSets, serializers, non-Sentry Django code | `references/django.md` |
+| FastAPI routers, `Depends`, `APIRouter` dependency propagation | `references/fastapi.md` |
+| Flask routes, `@login_required`, `before_request`, Blueprints | `references/flask.md` |
+| Express, Koa, Fastify, Hono, Elysia middleware | `references/express.md` |
+| NestJS guards, `@UseGuards`, `APP_GUARD`, `@Public`, `@Roles` | `references/nestjs.md` |
+| Next.js `middleware.ts`, `route.ts`, Server Actions, `pages/api` | `references/nextjs.md` |
+| tRPC procedures and middleware | `references/trpc.md` |
+| GraphQL resolvers (Apollo, Yoga, Mercurius, graphql-ruby), Federation, directives | `references/graphql.md` |
+| JWT, session, or token-derived role/scope claims used in permission decisions | `references/jwt.md` |
+| Login, logout, password reset, or session code that changes authorization state | `references/sessions.md` |
 
 ## Severity
 
 | Level | Criteria |
 |-------|----------|
-| **high** | Unauthenticated access to non-public data or actions. Cross-tenant read or write. Admin actions reachable without admin scope. Forged or replayed token accepted as valid. Privilege escalation with a realistic trigger. Mass assignment that sets role/tenant/permission fields. |
+| **high** | Cross-tenant read or write. Admin actions reachable without admin scope. Forged or replayed token accepted as valid for a permission decision. Privilege escalation with a realistic trigger. Mass assignment that sets role/tenant/permission fields. |
 | **medium** | Check exists but is incomplete (authentication without authorization, role check with a fail-open default, ownership check covering read but not write). Requires a specific but plausible condition to exploit. |
 | **low** | Defense-in-depth gap. Primary check holds; a secondary layer is missing or weak. Report only when the thread is clear. |
 
 Pick the lower level when in doubt and explain why. Over-reporting erodes signal.
 
 ## What to Report
-
-### Authentication bypasses
-
-- Protected route, resolver, GraphQL field, Server Action, RPC method, tRPC procedure, or admin action reachable without an authenticated principal.
-- Middleware, decorator, dependency, or guard declared but not applied. Common shapes: Express subrouter mounted outside the auth scope, FastAPI route added without the `Depends(get_current_user)` parameter, NestJS `@Public()` accidentally applied, Flask `@login_required` below `@app.route` (decorator order matters), FastAPI `APIRouter(dependencies=[...])` dropped when sub-router is included.
-- Authentication checks that accept anonymous or sentinel principals as valid (`if user:` where `AnonymousUser` is truthy; checking `request.user is not None` when Django's `AnonymousUser` is always not-None).
-- Token validation that skips signature verification (`jwt.decode` without verify), accepts `alg: none`, or mixes HS/RS algorithms. See `jwt.md`.
-- Known framework bypass classes: Next.js `x-middleware-subrequest` header bypass (CVE-2025-29927), Next.js Server Actions without in-action auth (CVE-2025-55182 class), Apollo Federation interface directive propagation (CVE-2025-64530).
-- Session fixation: session identifier not rotated on login (Keycloak CVE-2024-7341 shape). See `sessions.md`.
-- Password reset tokens not bound to a single verified principal, not single-use, or derivable from `Host:` header (GitLab CVE-2023-7028). See `sessions.md`.
-
-### Authorization flaws
 
 - **IDOR**: handler reads or mutates a resource by an ID from the request without verifying the principal has access. The canonical Django/DRF shape is `Model.objects.get(id=kwargs['id'])` or `queryset = Model.objects.all()` on a `ModelViewSet` with no `get_queryset` override. The canonical Express/Prisma shape is `findUnique({ where: { id: req.params.id } })`.
 - **Missing tenant/org scoping**: query filters by primary ID only, not by the caller's organization/team/shop. Sentry-specific shape: endpoint does `Project.objects.get_from_cache(id=...)` instead of `self.get_projects(request, organization, project_ids={id})`. Shopify H1 #2207248 and SingleStore H1 #3219944 are real incidents of this shape.
@@ -80,33 +68,36 @@ Pick the lower level when in doubt and explain why. Over-reporting erodes signal
 - **Mass assignment / over-posting**: `req.body` spread into an ORM create/update, or DRF `ModelSerializer` with `fields = '__all__'` on a write endpoint. Attacker posts `{"role": "admin"}`, `{"is_staff": true}`, `{"organization_id": other_org}`, etc.
 - **Permission class overrides `has_permission` but not `has_object_permission`**: endpoint-level auth passes, but object-level checks are never called. In DRF, `has_object_permission` defaults to closed only when `check_object_permissions` is invoked; for endpoints that bypass `get_object`, the object check never runs.
 - **Forced browsing**: admin/internal paths reachable because the check relies on the frontend not linking them.
+- **Missing authorization guard on a protected action**: route, resolver, Server Action, RPC method, tRPC procedure, or admin action mutates or reveals protected resources with no permission check. Do not report a merely missing login decorator unless the code path reaches protected data or behavior.
 - **Horizontal escalation**: user A can act on user B's resource via any mutation surface (update, delete, invite, export, share).
 - **Vertical escalation**: user elevates their own role or permissions via a mutation that does not re-verify authority.
 - **Impersonation endpoints**: "log in as user" / support tools without staff-role gate, session binding, or audit logging (ruby-saml CVE-2024-45409 is the closest canonical incident in this family).
 - **Token-only scope leaks into wrong auth flow**: a scope intended only for API tokens (Sentry's `org:ci`) reachable via session cookie or OAuth. Sentry commits `b4aeabc03de` and `7a009be6b1c` are this class.
+- **Token or session claims trusted for authorization without verification**: unsigned JWT claims, replayed session state, or password-reset identity claims feed role, tenant, or scope checks. See `references/jwt.md` and `references/sessions.md`.
 - **Sentry-specific bug shapes** including unscoped ORM lookups, wrong base class (`Endpoint` instead of `OrganizationEndpoint` for org-scoped data), and `get_projects()` called but result unused: see `references/sentry.md`.
 
 ## What NOT to Report
 
-Other skills handle these:
+Do not report these from this skill:
 
 - **Injection** (SQLi, XSS, SSRF, command injection, template injection).
-- **Crypto primitives** (weak hashes, bad random, ECB) unless the misuse directly enables an auth/permission bypass (e.g., a JWT signed with a predictable secret).
+- **Pure authentication lifecycle bugs** (login, password reset, session fixation, MFA, account recovery) unless the bug directly feeds a protected authorization decision.
+- **Crypto primitives** (weak hashes, bad random, ECB) unless the misuse directly enables a permission bypass (e.g., a JWT signed with a predictable secret that grants admin scope).
 - **Secrets in source** (hardcoded API keys, credentials).
 - **Transport** (missing TLS, HSTS, weak ciphers).
 - **Generic hygiene** (verbose error messages, missing rate limits on non-sensitive endpoints, general logging, non-auth input validation).
-- **CSRF** unless the missing CSRF protection directly produces a bypass of an otherwise-enforced access control.
+- **CSRF** unless the missing CSRF protection directly produces a bypass of an otherwise-enforced authorization decision.
 - **DoS** (ReDoS, unbounded queries, resource exhaustion).
 - **Dependency CVEs** (out-of-date packages).
 - **Style** (naming, layout, organization).
 
-If a change is only about one of the above, do not invent an access-control angle.
+If a change is only about one of the above, do not invent an authorization angle.
 
 ## False-Positive Traps
 
 Patterns that look like bugs but are often safe. Resolve these before reporting.
 
-1. **Global middleware or guard** may already protect the handler. Before reporting "missing auth," resolve the effective chain: NestJS `APP_GUARD`, Express `app.use(auth)` mounted before the route, FastAPI `APIRouter(dependencies=[...])`, Django's `LoginRequiredMiddleware` (added in Django 5.1). Grep for `APP_GUARD`, `app.use`, `add_middleware`, `MIDDLEWARE =`, and `authentication_classes` before flagging.
+1. **Global middleware or guard** may already protect the handler. Before reporting a missing authorization gate, resolve the effective chain: NestJS `APP_GUARD`, Express `app.use(auth)` mounted before the route, FastAPI `APIRouter(dependencies=[...])`, Django's `LoginRequiredMiddleware` (added in Django 5.1). Grep for `APP_GUARD`, `app.use`, `add_middleware`, `MIDDLEWARE =`, and `authentication_classes` before flagging.
 2. **Reverse-proxy auth** (Cloudflare Access, GCP IAP, Envoy ext_authz) may front the app. If the app is only reachable via the proxy and receives verified identity headers, a missing in-app decorator is not automatically a bug. Look for `X-Forwarded-User`, IAP headers, or deployment manifests.
 3. **Explicitly public endpoints** (`/login`, `/signup`, `/healthz`, `/.well-known/*`, webhook receivers authenticated by signature) must remain public. Do not flag.
 4. **Inherited `get_queryset` via MRO**. A concrete DRF viewset may look bare because a base class (`TenantScopedViewSet`, `OrganizationEndpoint`) provides the filter. Read up the class hierarchy.
@@ -291,41 +282,53 @@ router.patch('/me', requireAuth, async (req, res) => {
 });
 ```
 
-### Pattern: JWT verification accepts forged tokens
+### Pattern: Forged token grants role or scope
 
 Real incidents: jsonwebtoken CVE-2022-23540 (default-alg bypass), CVE-2022-23541 (RS→HS confusion), PyJWT CVE-2022-29217 (alg confusion), Java ECDSA CVE-2022-21449 ("psychic signatures"). See `references/jwt.md`.
 
 **Python - bad:**
 ```python
 payload = jwt.decode(token, options={"verify_signature": False})
+if payload["role"] == "admin":
+    delete_user(request.data["user_id"])
 # or
 payload = jwt.decode(token, key, algorithms=["HS256", "RS256"])  # Mixed allows confusion.
+if "org:admin" in payload["scope"]:
+    update_billing()
 ```
 
 **Python - safe:**
 ```python
 payload = jwt.decode(token, key, algorithms=["RS256"])
+if "org:admin" in payload["scope"] and payload["org_id"] == request.org.id:
+    update_billing()
 ```
 
 **TypeScript - bad:**
 ```ts
 const claims = jwt.decode(token);           // Returns claims without verifying.
+if (claims.role === 'admin') await deleteUser(req.body.userId);
+
 const claims = jwt.verify(token, key);      // CVE-2022-23540: no algorithms pin.
+if (claims.scope?.includes('org:admin')) await updateBilling();
 ```
 
 **TypeScript - safe:**
 ```ts
 const claims = jwt.verify(token, publicKey, { algorithms: ['RS256'] });
+if (claims.scope?.includes('org:admin') && claims.orgId === req.org.id) {
+  await updateBilling();
+}
 ```
 
-### Pattern: Auth middleware declared but not applied
+### Pattern: Authorization guard declared but not applied
 
 Real shape from a parallel research scan: MLflow ajax-api endpoints shipped without the shared `Depends()`.
 
 **Python (FastAPI) - bad:**
 ```python
 # Dependency is defined...
-async def require_user(token: str = Header(...)) -> User: ...
+async def require_admin(user: User = Depends(require_user)) -> User: ...
 
 # ...but this router never references it.
 admin_router = APIRouter(prefix="/admin")
@@ -347,7 +350,7 @@ async def list_users():
 **TypeScript (Express) - bad:**
 ```ts
 app.use('/api', requireAuth);
-app.use('/admin', adminRouter);  // adminRouter mounted outside auth scope.
+app.use('/admin', requireAuth, adminRouter);  // No requireAdmin gate.
 ```
 
 **TypeScript - safe:**
@@ -385,57 +388,6 @@ export async function deleteUser(userId: string) {
   if (!session?.user?.isAdmin) throw new Error('unauthorized');
   await db.user.delete({ where: { id: userId } });
 }
-```
-
-### Pattern: Session fixation
-
-Real incident: Keycloak CVE-2024-7341 (SAML adapter did not rotate `JSESSIONID` at login).
-
-**Python (Flask) - bad:**
-```python
-@app.post("/login")
-def login():
-    user = authenticate(request.form["email"], request.form["password"])
-    if user:
-        session["user_id"] = user.id
-        return redirect("/")
-```
-
-**Python - safe:**
-```python
-@app.post("/login")
-def login():
-    user = authenticate(request.form["email"], request.form["password"])
-    if user:
-        session.clear()
-        session.regenerate()
-        session["user_id"] = user.id
-        return redirect("/")
-```
-
-**TypeScript (express-session) - bad:**
-```ts
-app.post('/login', async (req, res) => {
-  const user = await authenticate(req.body.email, req.body.password);
-  if (user) {
-    req.session.userId = user.id;
-    res.redirect('/');
-  }
-});
-```
-
-**TypeScript - safe:**
-```ts
-app.post('/login', async (req, res) => {
-  const user = await authenticate(req.body.email, req.body.password);
-  if (user) {
-    req.session.regenerate((err) => {
-      if (err) return res.sendStatus(500);
-      req.session.userId = user.id;
-      res.redirect('/');
-    });
-  }
-});
 ```
 
 ## Investigation Playbook

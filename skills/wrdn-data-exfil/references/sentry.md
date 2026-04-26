@@ -1,6 +1,6 @@
 # Sentry Data-Exfiltration Reference
 
-Load when the diff touches `sentry.http`, `sentry.net`, integration webhooks that fetch URLs, response serializers, or anything that returns data to clients. For YAML / pickle / eval (code-execution angle), see `wrdn-code-execution/references/sentry.md`.
+Load when the diff touches `sentry.http`, `sentry.net`, integration webhooks that fetch URLs, response serializers, or anything that returns data to clients. Ignore YAML, pickle, and eval unless they expose data.
 
 ## SSRF: The Safe Path
 
@@ -55,7 +55,7 @@ Fix: commit `3a8b6dc825e` ("improve api application redirect uri validation").
 - Redirect URIs validated by substring (vulnerable to `attacker.com.registered-prefix.com`). Must be exact-match, full-origin, case-sensitive.
 - Open-redirect-like handlers that include attacker-controlled URL fragments in error pages or in cross-domain links.
 
-The access-control angle is in `wrdn-access-control`.
+The data-exfil angle is leaked authorization codes or tokens through redirect behavior.
 
 ## Webhook Callback URLs
 

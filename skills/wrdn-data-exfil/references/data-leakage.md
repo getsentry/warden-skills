@@ -114,7 +114,7 @@ const created = await prisma.user.create({ data: { ...req.body } });
 return res.json(created);   // Mass-assignment on input AND leak on output.
 ```
 
-Mass assignment is a `wrdn-access-control` concern; the leak angle is this skill.
+Mass assignment that changes roles, tenants, or permissions is out of scope unless it also exposes data.
 
 ## Error Handlers
 

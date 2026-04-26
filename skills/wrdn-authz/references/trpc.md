@@ -126,7 +126,7 @@ tRPC middlewares run in declared order. `use()` placed after input parsing sees 
 
 ### 7. Batched calls bypassing per-request rate/auth
 
-tRPC supports batched calls. If a rate-limit middleware or auth-check middleware increments a counter per-batch rather than per-call, attackers can cram many sensitive operations into a single HTTP request. Not strictly access-control, but worth noting.
+tRPC supports batched calls. If a rate-limit middleware or auth-check middleware increments a counter per-batch rather than per-call, attackers can cram many sensitive operations into a single HTTP request. Not strictly authorization, but worth noting.
 
 ## False-Positive Traps
 

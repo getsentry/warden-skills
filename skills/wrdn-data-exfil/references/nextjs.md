@@ -1,6 +1,6 @@
 # Next.js Data-Exfiltration Reference
 
-Load when the diff touches `middleware.ts`, `app/**/route.ts`, Server Actions, `next.config.js` `images.remotePatterns`, or any Server Component returning DB data. For React2Shell (CVE-2025-55182) and Server Actions reaching `eval`/`Function`, see `wrdn-code-execution/references/nextjs.md`.
+Load when the diff touches `middleware.ts`, `app/**/route.ts`, Server Actions, `next.config.js` `images.remotePatterns`, or any Server Component returning DB data. Ignore React2Shell and Server Actions reaching `eval`/`Function` unless they expose data.
 
 ## CVE-2024-34351 — Server Actions SSRF
 
@@ -41,7 +41,7 @@ module.exports = {
 
 ## CVE-2025-29927 — Middleware Bypass Enables SSRF Bypass
 
-`x-middleware-subrequest` header short-circuited middleware. The access-control angle is in `wrdn-access-control`. The exfil angle: a middleware that pre-filters URLs (e.g., for SSRF defense) is bypassable, turning a "safe" downstream fetch into an SSRF primitive.
+`x-middleware-subrequest` header short-circuited middleware. The exfil angle: a middleware that pre-filters URLs, for example for SSRF defense, is bypassable, turning a "safe" downstream fetch into an SSRF primitive.
 
 Pin Next.js `>= 15.2.3` (or appropriate backport) and don't rely on middleware as the sole defense.
 

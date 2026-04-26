@@ -1,6 +1,6 @@
 # FastAPI Data-Exfiltration Reference
 
-Load when the diff touches Pydantic response models, FastAPI endpoints returning ORM data, file responses, static-file mounting, or outbound HTTP calls. For Jinja2 templates, BackgroundTasks-with-subprocess, and WebSocket sinks (code-execution angle), see `wrdn-code-execution/references/fastapi.md`.
+Load when the diff touches Pydantic response models, FastAPI endpoints returning ORM data, file responses, static-file mounting, or outbound HTTP calls. Ignore Jinja2 templates, BackgroundTasks-with-subprocess, and WebSocket sinks unless they expose data.
 
 ## Missing `response_model`
 
