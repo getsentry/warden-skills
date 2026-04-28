@@ -1,0 +1,9 @@
+version = 1
+
+[defaults]
+failOn = "high"
+reportOn = "medium"
+
+[[skills]]
+name = "./skills/wrdn-pii"
+paths = ["skills/**/*"]
