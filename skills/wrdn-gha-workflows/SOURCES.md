@@ -124,3 +124,76 @@ Iteration pulled bug shapes from sentry/getsentry git history and recent public 
 | Cache risk | attacker-controlled keys/contents restored into privileged jobs | + 10 GiB eviction-and-replace pattern (Angular dev-infra) |
 | Comment-commands | authorization gate + safe-quoting | + TOCTOU between approval and head-ref resolution |
 | Supply-chain pinning | low/defense-in-depth | tiered medium/high based on job privilege; first-party carve-out |
+
+---
+
+## 2026-04-29 update, manual and reusable workflow input injection
+
+Iteration source: Warden PR #277, where `${{ inputs.bump }}` was interpolated directly into a release workflow shell command and fixed by moving the value into `env:` as `BUMP` and using `"$BUMP"` in the command. The concrete Warden workflow defines `bump` as a finite `choice` (`minor`, `patch`, `major`), so the PR is best treated as correct hardening and a detector-calibration example unless a caller path can bypass the option set. The same sink shape is exploitable for free-form `string` inputs, as shown by Sentry's `inputs.pr_options` fix.
+
+### Sources added
+
+| Source | Trust | Confidence | Contribution |
+|--------|-------|------------|--------------|
+| getsentry/warden PR #277, "fix: Prevent command injection in release workflow" | canonical | high | Prompt example: `workflow_dispatch` input reaches `npx semver -i` in a release workflow. Because `bump` is a finite `choice`, this calibrates hardening and choice-input false-positive handling as much as free-form input detection. |
+| sentry `c50c92f951c` "security: Fix shell injection vulnerability in bump-version workflow" | canonical | high | Same family: free-form `inputs.pr_options` reached `gh pr create --fill` in a manual/reusable workflow with a PAT. Confirms this is recurring Sentry prior art, not a one-off. |
+| sentry/getsentry local workflow scan for `workflow_dispatch`, `workflow_call`, `inputs.*`, and `github.event.inputs.*` | canonical/local | medium | Shows current repositories use manual inputs for refs, changed-file lists, release/version values, PR options, and workflow fanout. Some are safe via `env:` or non-shell contexts; the skill needs caller-aware tracing. |
+| GitHub Docs, "Secure use reference" | primary | high | Confirms script injection occurs before shell execution and recommends intermediate environment variables plus native shell access and quoting. Also notes token/secrets impact and least-privilege mitigation. |
+| GitHub Docs, "Workflow syntax for GitHub Actions" | primary | high | Confirms `workflow_dispatch` inputs are exposed in both `inputs` and `github.event.inputs`, and that `choice` resolves to a string while boolean values are preserved in `inputs`. |
+| CodeQL Actions query help, `actions/code-injection/critical` | primary | high | Confirms user-controlled input in Actions can lead to code injection in `run:` or `script:` and recommends `env:` plus native interpreter variable access, not `${{ env.X }}`. |
+| GitHub Security Lab, "Keeping your GitHub Actions and workflows secure Part 2: Untrusted input" | primary/operational | high | Confirms expression expansion before shell execution, untrusted input surfaces, impact on secrets/tokens, and env-variable remediation. |
+
+### Example intake summary
+
+| ID | Label | Kind | Origin | Source | Expected behavior | Previous behavior | Skill delta |
+|----|-------|------|--------|--------|-------------------|-------------------|-------------|
+| EX-2026-04-29-001 | negative | edge-case | human-verified | getsentry/warden PR #277 | Prefer `env:` plus `"$BUMP"` hardening for `${{ inputs.bump }}` in a release workflow, but account for the finite `choice` option set before calling it exploitable RCE. | The threat model and "What NOT to Report" excluded `workflow_dispatch` entirely, while the expression-injection guidance did not distinguish free-form inputs from constrained choices. | Add manual/reusable workflow input tracing, plus explicit `choice` false-positive controls and eval prompts. |
+| EX-2026-04-29-002 | positive | fix | mixed | sentry `c50c92f951c` | Preserve detection for free-form input option strings such as `inputs.pr_options` reaching `gh pr create --fill` with privileged credentials. | Existing guidance mentioned composite action inputs but not top-level manual/reusable workflow inputs. | Add explicit `workflow_dispatch` and `workflow_call` input sources and severity calibration. |
+| EX-2026-04-29-003 | negative | edge-case | synthetic from docs and local usage | GitHub workflow syntax; local workflow scan | Do not report hardcoded `choice`, `boolean`, `number`, or `environment` inputs used only in `if:`, `with:`, or safely quoted `env:` contexts. | Existing skill had no manual-input false-positive control because it excluded the whole class. | Add constrained-input carve-out and negative eval prompt. |
+
+### Decisions
+
+| Decision | Status | Rationale |
+|----------|--------|-----------|
+| Treat free-form `workflow_dispatch` and `workflow_call` inputs as caller-controlled in shell/script sinks. | adopted | GitHub expands expressions before interpreter execution; manual and reusable callers can supply the string. |
+| Keep external attacker findings as the preferred threat model, but no longer exclude manual workflow RCE. | adopted | PR #277 and sentry `c50c92f` show release/bump workflows can grant tokens or release automation beyond ordinary caller actions. |
+| Calibrate manual `workflow_dispatch` severity by caller and job privilege. | adopted | A write user triggering a manual workflow is not the same as a fork PR attacker, but arbitrary shell under PATs, release credentials, OIDC, packages, or self-hosted runners is still reportable. |
+| Treat hardcoded `choice`, `boolean`, `number`, and `environment` inputs as usually safe unless the option set is shell-unsafe, a caller/API path can bypass the set, or a later sink reinterprets the value as code. | adopted | Reduces noise for common manual workflow UX while preserving tracing when a value becomes code or shell syntax later. |
+| Add `SPEC.md` for `wrdn-gha-workflows`. | adopted | The change materially expands intended scope and out-of-scope behavior, so future maintainers need a maintenance contract. |
+| Add durable `references/evidence/` files. | deferred | This is a focused false-negative fix. `SOURCES.md` captures the examples and behavior deltas; evidence files can be added if repeated examples accumulate. |
+
+### Coverage matrix delta
+
+| Dimension | Previous | Now |
+|-----------|----------|-----|
+| Threat model | External attacker without repo write access | External attacker preferred, plus manual/reusable callers when input reaches privileged code execution |
+| Input sources | GitHub event context and externally reachable action inputs | + `workflow_dispatch` `inputs.*`, `github.event.inputs.*`, and `workflow_call` `inputs.*` |
+| Expression-injection sinks | `run:`, composite shell, `github-script`, workflow command files | Same sinks, with explicit manual/reusable examples (`npx semver -i`, `gh pr create --fill`, tags/refs/options) |
+| False-positive controls | Excluded all `workflow_dispatch` risks | Report only caller-controlled sink plus privileged impact; distinguish free-form strings from shell-safe constrained choices |
+| Evaluation | PR/title/comment/callee expression injection prompts | + manual input injection positive, reusable input injection positive, constrained manual input negative |
+
+### Description optimization
+
+Should trigger additions:
+
+- Review this release workflow for `workflow_dispatch` input command injection.
+- Check a reusable workflow where `inputs.pr_options` reaches `gh pr create`.
+- Audit manual GitHub Actions inputs used in shell commands.
+
+Should not trigger additions:
+
+- Tune the labels and defaults for a manual workflow form.
+- Validate that a hardcoded `choice` input is listed in the UI.
+- Explain how to manually run a GitHub Actions workflow.
+
+Final description now names `workflow_dispatch` and `workflow_call` input command injection to improve recall for PR #277-class bugs without turning the skill into a manual workflow UX reviewer.
+
+### Replay summary
+
+- Warden PR #277-class diff: improved. The updated skill should load `references/expression-injection.md`, identify `inputs.bump` as caller-controlled, identify `npx semver -i` as the shell sink, notice `bump` is a finite `choice`, and recommend `env:` plus `"$BUMP"` as hardening unless a bypass to arbitrary input exists.
+- Sentry `c50c92f951c` pre-fix shape: improved. The skill now explicitly flags free-form `inputs.pr_options` reaching `gh pr create --fill` under privileged credentials.
+- Safe hardcoded choice input: improved. The new false-positive control tells the agent to drop constrained manual inputs used through quoted `env:` unless another exploit path exists.
+
+### Stopping rationale
+
+Further retrieval is low-yield for this iteration. The referenced Warden PR, Sentry historical fix, GitHub primary docs, CodeQL query help, and local workflow scan all point to the same missing class: caller-controlled workflow inputs interpolated into code-evaluating sinks. Remaining work is fixture-based regression testing if this repository later adds an executable eval harness.

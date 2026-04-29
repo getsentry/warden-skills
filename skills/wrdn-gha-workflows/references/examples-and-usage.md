@@ -37,6 +37,7 @@ The skill may also need scripts or config files referenced by workflows. Add tho
 - "Review this `.github/workflows` diff for unsafe `pull_request_target` usage."
 - "Check whether this comment-triggered deployment workflow can be abused."
 - "Scan these local composite actions for expression injection."
+- "Review this release workflow for `workflow_dispatch` input command injection."
 - "Review GHA permissions and secrets exposure in this PR workflow."
 - "Does this reusable workflow chain execute fork code with write permissions?"
 
@@ -48,6 +49,7 @@ The skill may also need scripts or config files referenced by workflows. Add tho
 - "Review Dockerfile security."
 - "Find hardcoded secrets in source code."
 - "Check branch protection settings in GitHub."
+- "Tune the labels and defaults for a manual workflow form."
 
 ## Lightweight Eval Prompts
 
@@ -65,6 +67,14 @@ Workflow uses `pull_request_target` only to label PRs and comment using PR numbe
 
 Workflow runs on `pull_request` and has `run: echo "${{ github.event.pull_request.title }}"`. Expected result: medium or high finding depending on token/secrets impact, with fix to pass through `env` and quote.
 
+### Positive: manual workflow input injection
+
+Release workflow runs on `workflow_dispatch`, accepts a free-form string input `bump`, grants release or contents-write permissions, and runs `NEW=$(npx semver -i ${{ inputs.bump }} $CURRENT)`. Expected result: medium or high finding depending on who can trigger it and what credentials are present. The finding should call it manual/caller-controlled command injection, not fork-PR exploitation. Fix is a constrained input type or allowlist plus `env:` and quoted `"$BUMP"`.
+
+### Positive: reusable workflow input injection
+
+Workflow has `on: workflow_call` with free-form `pr_options`, a caller passes user-controlled text through `with:`, and the callee runs `gh pr create --fill ${{ inputs.pr_options }}` with a PAT. Expected result: finding that traces caller input into the callee's shell command and token-backed PR creation. Fix is validation plus `env:` and quoted shell variables, or avoid shell option strings entirely.
+
 ### Positive: filename injection
 
 Workflow runs on `pull_request`, collects changed files, and loops over `${{ steps.changed.outputs.files }}` in a shell. Expected result: expression-injection finding explaining that filenames from the PR are attacker-controlled shell data.
@@ -72,6 +82,14 @@ Workflow runs on `pull_request`, collects changed files, and loops over `${{ ste
 ### Negative: safe expression context
 
 Workflow uses `${{ github.event.pull_request.number }}` in `run:` and `${{ github.event.pull_request.title }}` only in `if:`. Expected result: no expression-injection finding.
+
+### Negative: constrained manual input
+
+Workflow uses `workflow_dispatch` with a hardcoded `choice` input `environment: [staging, production]`, passes it through `env: TARGET_ENV`, and uses `./deploy "$TARGET_ENV"` with environment protection and no shell re-expansion through `${{ env.TARGET_ENV }}`. Expected result: no command-injection finding unless a separate authorization or environment-review bypass exists.
+
+### Negative: shell-safe choice interpolation
+
+Workflow uses `workflow_dispatch` with `bump` as `type: choice` and options `minor`, `patch`, `major`, then runs `npx semver -i ${{ inputs.bump }} "$CURRENT"` in a release job. Expected result: mention `env:` plus quoting as the preferred hardening if giving advice, but do not report exploitable RCE unless the reviewer finds a path that can supply values outside the hardcoded options.
 
 ### Positive: comment command
 
