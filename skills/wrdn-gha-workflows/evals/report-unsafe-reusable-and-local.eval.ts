@@ -15,8 +15,8 @@ import {
 
 const skillRoot = dirname(fileURLToPath(import.meta.url)).replace(/\/evals$/, "");
 
-const UnsafeReusableCalleeJudge = judge("UnsafeReusableCalleeJudge", async ({ criterion }) => {
-  return criterion("The response identifies the callee-side hazard in a reusable workflow or local/composite action chain. It must explicitly tie the danger to the callee: PR-controlled input reaching a code-evaluating sink inside the callee, action files loaded from an attacker-controlled checkout, runtime download of mutable code, undeclared secrets under workflow_call.secrets while secrets.X is referenced, or a callee without a permissions block running with the caller's broader grant. A finding limited to the caller's trigger without analysis of the callee does not satisfy the rubric.");
+const ReusableCalleeChainJudge = judge("ReusableCalleeChainJudge", async ({ criterion }) => {
+  return criterion("Explanation identifies the callee-side sink (PR input reaching shell/eval, unquoted untrusted input, attacker-checkout-sourced action, runtime code download, undeclared workflow_call.secrets, or missing narrower permissions) and ties it to the split caller/callee chain.");
 });
 
 describeEval(
@@ -24,17 +24,17 @@ describeEval(
   { harness: skilletHarness({ skill: skillRoot }) },
   (it) => {
     it(
-      "report-unsafe-reusable-and-local__reusable-callee-executes-pr-title",
+      "report-unsafe-reusable-and-local__reusable-callee-runs-pr-title",
       { timeout: 180_000 },
       async ({ run, behavior, harness }) => {
         behavior("report-unsafe-reusable-and-local");
-        await harness.setup("mkdir -p .github/workflows scripts\ncat > .github/workflows/caller.yml <<'YAML'\nname: caller\non:\n  pull_request_target:\n    types: [opened, synchronize]\njobs:\n  call:\n    uses: ./.github/workflows/reusable-build.yml\n    secrets: inherit\n    with:\n      pr_title: ${{ github.event.pull_request.title }}\nYAML\ncat > .github/workflows/reusable-build.yml <<'YAML'\nname: reusable-build\non:\n  workflow_call:\n    inputs:\n      pr_title:\n        type: string\n        required: true\njobs:\n  build:\n    runs-on: ubuntu-latest\n    steps:\n      - run: echo \"Building ${{ inputs.pr_title }}\"\n      - run: ./scripts/release.sh\n        env:\n          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}\nYAML\necho '#!/bin/sh' > scripts/release.sh\nchmod +x scripts/release.sh\n");
-        const result = await run("Please audit this caller/callee pair. The caller runs on pull_request_target and inherits secrets to the reusable workflow.\n\n.github/workflows/caller.yml:\n```yaml\nname: caller\non:\n  pull_request_target:\n    types: [opened, synchronize]\njobs:\n  call:\n    uses: ./.github/workflows/reusable-build.yml\n    secrets: inherit\n    with:\n      pr_title: ${{ github.event.pull_request.title }}\n```\n\n.github/workflows/reusable-build.yml:\n```yaml\nname: reusable-build\non:\n  workflow_call:\n    inputs:\n      pr_title:\n        type: string\n        required: true\njobs:\n  build:\n    runs-on: ubuntu-latest\n    steps:\n      - run: echo \"Building ${{ inputs.pr_title }}\"\n      - run: ./scripts/release.sh\n        env:\n          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}\n```");
+        await harness.setup("mkdir -p .github/workflows\ncat > .github/workflows/caller.yml <<'YAML'\nname: caller\non:\n  pull_request_target:\n    types: [opened, synchronize]\njobs:\n  call:\n    uses: ./.github/workflows/reusable-build.yml\n    secrets: inherit\nYAML\ncat > .github/workflows/reusable-build.yml <<'YAML'\nname: reusable-build\non:\n  workflow_call: {}\njobs:\n  build:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: actions/checkout@v4\n        with:\n          ref: ${{ github.event.pull_request.head.sha }}\n      - name: Greet PR\n        run: |\n          echo \"Building PR titled ${{ github.event.pull_request.title }}\"\n          npm install\n          npm run build\nYAML\n");
+        const result = await run("Audit this repo's workflows for supply-chain or injection risk. Look at .github/workflows/ and .github/actions/ together — caller and callee. Report concrete findings.");
 
-        expect(result.session.outputText).toMatch(new RegExp("(reusable|callee|workflow_call)", "i"));
-        expect(result.session.outputText).toMatch(new RegExp("inputs\\.pr_title|pull_request\\.title", "i"));
+        expect(result.session.outputText).toContain("reusable-build.yml");
+        expect(result.session.outputText).toContain("github.event.pull_request.title");
         expect(result.session.outputText).toMatch(new RegExp("\\b(HIGH|CRITICAL)\\b"));
-        await expect(result).toSatisfyJudge(UnsafeReusableCalleeJudge);
+        await expect(result).toSatisfyJudge(ReusableCalleeChainJudge);
       },
     );
 
@@ -43,27 +43,28 @@ describeEval(
       { timeout: 180_000 },
       async ({ run, behavior, harness }) => {
         behavior("report-unsafe-reusable-and-local");
-        await harness.setup("mkdir -p .github/workflows .github/actions/setup scripts\ncat > .github/workflows/ci.yml <<'YAML'\nname: ci\non:\n  pull_request_target:\njobs:\n  test:\n    runs-on: ubuntu-latest\n    permissions:\n      contents: write\n      id-token: write\n    steps:\n      - uses: actions/checkout@v4\n        with:\n          ref: ${{ github.event.pull_request.head.sha }}\n      - uses: ./.github/actions/setup\nYAML\ncat > .github/actions/setup/action.yml <<'YAML'\nname: setup\nruns:\n  using: composite\n  steps:\n    - run: ./scripts/setup.sh\n      shell: bash\nYAML\necho '#!/bin/bash' > scripts/setup.sh\nchmod +x scripts/setup.sh\n");
-        const result = await run("Anything wrong with this workflow that uses a local composite action after checking out the PR head?\n\n.github/workflows/ci.yml:\n```yaml\nname: ci\non:\n  pull_request_target:\njobs:\n  test:\n    runs-on: ubuntu-latest\n    permissions:\n      contents: write\n      id-token: write\n    steps:\n      - uses: actions/checkout@v4\n        with:\n          ref: ${{ github.event.pull_request.head.sha }}\n      - uses: ./.github/actions/setup\n```\n\n.github/actions/setup/action.yml:\n```yaml\nname: setup\nruns:\n  using: composite\n  steps:\n    - run: ./scripts/setup.sh\n      shell: bash\n```");
+        await harness.setup("mkdir -p .github/workflows .github/actions/lint-pr\ncat > .github/workflows/pr-lint.yml <<'YAML'\nname: pr-lint\non:\n  pull_request_target: {}\npermissions:\n  contents: read\n  pull-requests: write\njobs:\n  lint:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: actions/checkout@v4\n        with:\n          ref: ${{ github.event.pull_request.head.sha }}\n      - uses: ./.github/actions/lint-pr\n        with:\n          token: ${{ secrets.GITHUB_TOKEN }}\nYAML\ncat > .github/actions/lint-pr/action.yml <<'YAML'\nname: lint-pr\ndescription: Lint a PR\ninputs:\n  token:\n    required: true\nruns:\n  using: composite\n  steps:\n    - shell: bash\n      run: |\n        ./scripts/lint.sh\nYAML\nmkdir -p scripts\ncat > scripts/lint.sh <<'SH'\n#!/usr/bin/env bash\necho linting\nSH\nchmod +x scripts/lint.sh\n");
+        const result = await run("Review the workflow plus the local composite action it uses. Anything exploitable across the pair?");
 
-        expect(result.session.outputText).toMatch(new RegExp("(local|composite) action", "i"));
-        expect(result.session.outputText).toMatch(new RegExp("(checkout|attacker-controlled|PR.*(head|code))", "i"));
-        expect(result.session.outputText).toMatch(new RegExp("\\b(HIGH|CRITICAL)\\b"));
-        await expect(result).toSatisfyJudge(UnsafeReusableCalleeJudge);
+        expect(result.session.outputText).toContain(".github/actions/lint-pr");
+        expect(result.session.outputText).toMatch(new RegExp("pull_request_target", "i"));
+        expect(result.session.outputText).toMatch(new RegExp("(attacker.controlled|PR.controlled|head\\.sha|untrusted checkout)", "i"));
+        await expect(result).toSatisfyJudge(ReusableCalleeChainJudge);
       },
     );
 
     it(
-      "report-unsafe-reusable-and-local__callee-no-permissions-block",
+      "report-unsafe-reusable-and-local__undeclared-workflow-call-secret",
       { timeout: 180_000 },
       async ({ run, behavior, harness }) => {
         behavior("report-unsafe-reusable-and-local");
-        await harness.setup("mkdir -p .github/workflows\ncat > .github/workflows/release-callee.yml <<'YAML'\nname: release-callee\non:\n  workflow_call:\n    inputs:\n      ref:\n        type: string\njobs:\n  publish:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: actions/checkout@v4\n        with:\n          ref: ${{ inputs.ref }}\n      - run: npm ci && npm publish\n        env:\n          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}\nYAML\n");
-        const result = await run("Review this reusable workflow. The caller grants contents: write and id-token: write and passes the PR ref. Is the callee structured safely?\n\n.github/workflows/release-callee.yml:\n```yaml\nname: release-callee\non:\n  workflow_call:\n    inputs:\n      ref:\n        type: string\njobs:\n  publish:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: actions/checkout@v4\n        with:\n          ref: ${{ inputs.ref }}\n      - run: npm ci && npm publish\n        env:\n          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}\n```");
+        await harness.setup("mkdir -p .github/workflows\ncat > .github/workflows/caller.yml <<'YAML'\nname: caller\non:\n  push:\n    branches: [main]\njobs:\n  publish:\n    uses: ./.github/workflows/publish.yml\n    secrets: inherit\nYAML\ncat > .github/workflows/publish.yml <<'YAML'\nname: publish\non:\n  workflow_call: {}\njobs:\n  publish:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: actions/checkout@v4\n      - run: npm publish\n        env:\n          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}\nYAML\n");
+        const result = await run("The reusable workflow uses secrets.NPM_TOKEN but I don't see it declared. Is that a real problem here?");
 
-        expect(result.session.outputText).toMatch(new RegExp("permissions", "i"));
-        expect(result.session.outputText).toMatch(new RegExp("(callee|reusable|workflow_call)", "i"));
-        await expect(result).toSatisfyJudge(UnsafeReusableCalleeJudge);
+        expect(result.session.outputText).toContain("workflow_call");
+        expect(result.session.outputText).toContain("NPM_TOKEN");
+        expect(result.session.outputText).toMatch(new RegExp("(not declared|undeclared|missing.*secrets|secrets:\\s*inherit)", "i"));
+        await expect(result).toSatisfyJudge(ReusableCalleeChainJudge);
       },
     );
   },

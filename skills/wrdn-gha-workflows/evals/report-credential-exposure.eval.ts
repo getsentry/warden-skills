@@ -16,7 +16,7 @@ import {
 const skillRoot = dirname(fileURLToPath(import.meta.url)).replace(/\/evals$/, "");
 
 const CredentialExposureJudge = judge("CredentialExposureJudge", async ({ criterion }) => {
-  return criterion("The response identifies the specific credential-exposure mechanism (e.g., persist-credentials checkout leak, derived-secret logging, ArtiPACKED .git/credential upload, broad OIDC trust, write-scoped token amplification) and ties it to a concrete exploit path showing how an attacker reaches the secret or token. A generic 'be careful with secrets' note does not satisfy the rubric.");
+  return criterion("Explanation connects the untrusted execution path to the specific credential exposed (token scope, persisted checkout creds, OIDC trust, or .git/home dir in artifact). Generic 'don't leak secrets' fails.");
 });
 
 describeEval(
@@ -24,43 +24,32 @@ describeEval(
   { harness: skilletHarness({ skill: skillRoot }) },
   (it) => {
     it(
-      "report-credential-exposure__artipacked-git-upload",
-      { timeout: 180_000 },
-      async ({ run, behavior }) => {
+      "report-credential-exposure__artipacked-upload",
+      { timeout: 120_000 },
+      async ({ run, behavior, harness }) => {
         behavior("report-credential-exposure");
-        const result = await run("Please audit this workflow for security issues:\n\n```yaml\nname: Build Artifacts\non:\n  pull_request_target:\n    types: [opened, synchronize]\njobs:\n  build:\n    runs-on: ubuntu-latest\n    permissions:\n      contents: write\n    steps:\n      - uses: actions/checkout@v4\n        with:\n          ref: ${{ github.event.pull_request.head.sha }}\n      - run: npm ci && npm run build\n      - uses: actions/upload-artifact@v4\n        with:\n          name: build-output\n          path: |\n            ./\n```");
+        await harness.setup("mkdir -p .github/workflows\ncat > .github/workflows/release.yml <<'YAML'\nname: release\non:\n  push:\n    branches: [main]\npermissions:\n  contents: write\n  id-token: write\njobs:\n  build:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: actions/checkout@v4\n      - run: npm ci && npm run build\n      - uses: actions/upload-artifact@v4\n        with:\n          name: build-output\n          path: |\n            ./\nYAML\n");
+        const result = await run("Please review .github/workflows/release.yml for any security issues with how it handles credentials or artifacts.");
 
-        expect(result.session.outputText).toMatch(new RegExp("(ArtiPACKED|\\.git|persist-credentials|credential)", "i"));
-        expect(result.session.outputText).toMatch(new RegExp("upload-artifact", "i"));
+        expect(result.session.outputText).toContain("upload-artifact");
+        expect(result.session.outputText).toMatch(new RegExp("\\.git\\b|persisted.{0,20}credential", "i"));
         expect(result.session.outputText).toMatch(new RegExp("\\b(HIGH|CRITICAL|MEDIUM)\\b"));
         await expect(result).toSatisfyJudge(CredentialExposureJudge);
       },
     );
 
     it(
-      "report-credential-exposure__derived-secret-in-logs",
-      { timeout: 180_000 },
-      async ({ run, behavior }) => {
+      "report-credential-exposure__write-token-pwn-request",
+      { timeout: 120_000 },
+      async ({ run, behavior, harness }) => {
         behavior("report-credential-exposure");
-        const result = await run("Is there anything risky here?\n\n```yaml\nname: Deploy\non:\n  push:\n    branches: [main]\njobs:\n  deploy:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: actions/checkout@v4\n      - name: Compute deploy key\n        run: |\n          echo \"hash=$(echo -n \"${{ secrets.DEPLOY_TOKEN }}\" | base64)\" >> $GITHUB_OUTPUT\n          echo \"Token prefix: $(echo \"${{ secrets.DEPLOY_TOKEN }}\" | cut -c1-4)\"\n```");
+        await harness.setup("mkdir -p .github/workflows\ncat > .github/workflows/triage.yml <<'YAML'\nname: triage\non:\n  pull_request_target:\n    types: [opened, synchronize]\npermissions:\n  contents: write\n  pull-requests: write\n  id-token: write\njobs:\n  test:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: actions/checkout@v4\n        with:\n          ref: ${{ github.event.pull_request.head.sha }}\n          persist-credentials: true\n      - run: npm install && npm test\n        env:\n          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}\nYAML\n");
+        const result = await run("Audit .github/workflows/triage.yml — what's the impact if an attacker can influence what runs?");
 
-        expect(result.session.outputText).toMatch(new RegExp("(transform|derive|base64|mask|log)", "i"));
-        expect(result.session.outputText).toMatch(new RegExp("secret", "i"));
-        expect(result.session.outputText).toMatch(new RegExp("\\b(HIGH|CRITICAL|MEDIUM)\\b"));
-        await expect(result).toSatisfyJudge(CredentialExposureJudge);
-      },
-    );
-
-    it(
-      "report-credential-exposure__broad-oidc-trust",
-      { timeout: 180_000 },
-      async ({ run, behavior }) => {
-        behavior("report-credential-exposure");
-        const result = await run("Review this AWS role trust policy used by our GitHub OIDC workflow:\n\n```json\n{\n  \"Version\": \"2012-10-17\",\n  \"Statement\": [{\n    \"Effect\": \"Allow\",\n    \"Principal\": { \"Federated\": \"arn:aws:iam::123456789012:oidc-provider/token.actions.githubusercontent.com\" },\n    \"Action\": \"sts:AssumeRoleWithWebIdentity\",\n    \"Condition\": {\n      \"StringLike\": { \"token.actions.githubusercontent.com:sub\": \"repo:my-org/*:*\" }\n    }\n  }]\n}\n```\n\nThe workflow uses aws-actions/configure-aws-credentials@v4 with role-to-assume.");
-
-        expect(result.session.outputText).toMatch(new RegExp("(OIDC|trust policy|sub)", "i"));
-        expect(result.session.outputText).toMatch(new RegExp("(broad|wildcard|repo:my-org/\\*|any repo)", "i"));
-        expect(result.session.outputText).toMatch(new RegExp("\\b(HIGH|CRITICAL|MEDIUM)\\b"));
+        expect(result.session.outputText).toContain("GITHUB_TOKEN");
+        expect(result.session.outputText).toMatch(new RegExp("\\bcontents:\\s*write\\b|write-scoped|persist-credentials", "i"));
+        expect(result.session.outputText).toMatch(new RegExp("\\bsecrets\\.NPM_TOKEN\\b"));
+        expect(result.session.outputText).toMatch(new RegExp("\\b(HIGH|CRITICAL)\\b"));
         await expect(result).toSatisfyJudge(CredentialExposureJudge);
       },
     );

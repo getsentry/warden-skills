@@ -15,8 +15,8 @@ import {
 
 const skillRoot = dirname(fileURLToPath(import.meta.url)).replace(/\/evals$/, "");
 
-const UntraceableChainJudge = judge("UntraceableChainJudge", async ({ criterion }) => {
-  return criterion("The response either declines to report the finding (because the chain cannot be traced with the files available) OR reports it as medium confidence and explicitly names the missing link (e.g. the unseen composite action, referenced reusable workflow, or external script) needed to confirm the chain. A high-confidence finding asserted without the missing artifact fails the rubric.");
+const UntraceableHandlingJudge = judge("UntraceableHandlingJudge", async ({ criterion }) => {
+  return criterion("Response either drops the finding or marks it medium confidence and names the specific missing file/link needed to confirm. No high/critical claim on untraced chain.");
 });
 
 describeEval(
@@ -25,28 +25,31 @@ describeEval(
   (it) => {
     it(
       "drop-or-medium-when-untraceable__missing-composite-action",
-      { timeout: 180_000 },
+      { timeout: 120_000 },
       async ({ run, behavior, harness }) => {
         behavior("drop-or-medium-when-untraceable");
-        await harness.setup("mkdir -p .github/workflows .github/actions/process-pr\ncat > .github/workflows/pr.yml <<'YAML'\nname: PR Processor\non:\n  pull_request_target:\n    types: [opened, synchronize]\njobs:\n  process:\n    runs-on: ubuntu-latest\n    permissions:\n      contents: write\n    steps:\n      - uses: actions/checkout@v4\n        with:\n          ref: ${{ github.event.pull_request.head.sha }}\n      - uses: ./.github/actions/process-pr\n        with:\n          title: ${{ github.event.pull_request.title }}\n        env:\n          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}\nYAML");
-        const result = await run("Please audit this workflow. The composite action at ./.github/actions/process-pr is referenced but I haven't included its contents.\n\n```yaml\nname: PR Processor\non:\n  pull_request_target:\n    types: [opened, synchronize]\njobs:\n  process:\n    runs-on: ubuntu-latest\n    permissions:\n      contents: write\n    steps:\n      - uses: actions/checkout@v4\n        with:\n          ref: ${{ github.event.pull_request.head.sha }}\n      - uses: ./.github/actions/process-pr\n        with:\n          title: ${{ github.event.pull_request.title }}\n        env:\n          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}\n```");
+        await harness.setup("mkdir -p .github/workflows\ncat > .github/workflows/ci.yml <<'YAML'\nname: ci\non:\n  pull_request_target:\n    types: [opened, synchronize]\njobs:\n  build:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: actions/checkout@v4\n        with:\n          ref: ${{ github.event.pull_request.head.sha }}\n      - uses: my-org/private-composite-action@main\n        with:\n          title: ${{ github.event.pull_request.title }}\nYAML\n");
+        const result = await run("Audit this workflow for injection. The composite action it calls lives in another repo I haven't given you. Tell me what you can conclude.");
 
-        expect(result.session.outputText).toMatch(new RegExp("(composite action|process-pr|missing|cannot.*trace|unable.*trace|not.*available|medium confidence|drop)", "i"));
-        await expect(result).toSatisfyJudge(UntraceableChainJudge);
+        expect(result.session.outputText).toMatch(new RegExp("\\b(medium|MEDIUM)\\b"));
+        expect(result.session.outputText).toMatch(new RegExp("(missing|cannot.*trace|not.*available|need.*action|composite.*action)", "i"));
+        expect(result.session.outputText).not.toContain("CRITICAL");
+        await expect(result).toSatisfyJudge(UntraceableHandlingJudge);
       },
     );
 
     it(
-      "drop-or-medium-when-untraceable__reusable-workflow-not-shown",
-      { timeout: 180_000 },
+      "drop-or-medium-when-untraceable__drop-vague-resemblance",
+      { timeout: 120_000 },
       async ({ run, behavior, harness }) => {
         behavior("drop-or-medium-when-untraceable");
-        await harness.setup("mkdir -p .github/workflows\ncat > .github/workflows/build.yml <<'YAML'\nname: Build\non:\n  pull_request_target:\njobs:\n  call:\n    uses: other-org/shared/.github/workflows/build.yml@main\n    secrets:\n      NPM_TOKEN: ${{ secrets.NPM_TOKEN }}\n    with:\n      pr_title: ${{ github.event.pull_request.title }}\nYAML");
-        const result = await run("Audit this. The called reusable workflow lives in another repo I don't have access to here.\n\n```yaml\nname: Build\non:\n  pull_request_target:\njobs:\n  call:\n    uses: other-org/shared/.github/workflows/build.yml@main\n    secrets:\n      NPM_TOKEN: ${{ secrets.NPM_TOKEN }}\n    with:\n      pr_title: ${{ github.event.pull_request.title }}\n```");
+        await harness.setup("mkdir -p .github/workflows\ncat > .github/workflows/run.yml <<'YAML'\nname: run\non:\n  pull_request:\njobs:\n  test:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: actions/checkout@v4\n      - run: ./scripts/run-tests.sh\n        env:\n          PR_TITLE: ${{ github.event.pull_request.title }}\nYAML\n");
+        const result = await run("Does this workflow have an injection issue? I only have the workflow file, no scripts.");
 
-        expect(result.session.outputText).toMatch(new RegExp("(reusable workflow|other-org/shared|build\\.yml|cannot.*trace|unable.*confirm|medium confidence|missing)", "i"));
+        expect(result.session.outputText).toMatch(new RegExp("(medium|drop|cannot confirm|no finding|missing|out of scope)", "i"));
         expect(result.session.outputText).not.toContain("CRITICAL");
-        await expect(result).toSatisfyJudge(UntraceableChainJudge);
+        expect(result.session.outputText).not.toContain("HIGH confidence");
+        await expect(result).toSatisfyJudge(UntraceableHandlingJudge);
       },
     );
   },

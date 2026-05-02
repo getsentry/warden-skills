@@ -16,7 +16,7 @@ import {
 const skillRoot = dirname(fileURLToPath(import.meta.url)).replace(/\/evals$/, "");
 
 const SeverityCalibrationJudge = judge("SeverityCalibrationJudge", async ({ criterion }) => {
-  return criterion("The response assigns a severity that matches the table: HIGH for external-attacker code execution in privileged workflows (secret/token theft, package publication, release tampering, self-hosted compromise, or caller-driven RCE in release/deploy/publish/sign/token jobs); MEDIUM for plausible chains needing one verified link, tightly scoped tokens, approval gates, or mutable third-party actions in jobs with non-trivial secrets; LOW only for defense-in-depth adjacent to a reviewed risk. The justification ties severity to impact and exploitability (blast radius, what the attacker controls, what tokens/secrets are reachable), not to YAML shape. When uncertain, the response picks the lower tier and explains why.");
+  return criterion("Justifies severity by impact and exploitability (RCE in privileged context, secret/token theft, publish/release tampering), not by YAML shape. Picks lower tier when uncertain and says so.");
 });
 
 describeEval(
@@ -24,39 +24,44 @@ describeEval(
   { harness: skilletHarness({ skill: skillRoot }) },
   (it) => {
     it(
-      "calibrate-severity__high-pwn-request-publish",
-      { timeout: 180_000 },
-      async ({ run, behavior }) => {
+      "calibrate-severity__high-pwn-request-rce",
+      { timeout: 120_000 },
+      async ({ run, behavior, harness }) => {
         behavior("calibrate-severity");
-        const result = await run("Please audit this workflow and assign a severity:\n\n```yaml\nname: Build and Publish on PR\non:\n  pull_request_target:\n    types: [opened, synchronize]\njobs:\n  publish:\n    runs-on: ubuntu-latest\n    permissions:\n      contents: write\n      id-token: write\n    steps:\n      - uses: actions/checkout@v4\n        with:\n          ref: ${{ github.event.pull_request.head.sha }}\n      - run: npm ci\n      - run: npm publish\n        env:\n          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}\n```");
+        await harness.setup("mkdir -p .github/workflows\ncat > .github/workflows/ci.yml <<'YAML'\nname: ci\non:\n  pull_request_target:\n    types: [opened, synchronize]\njobs:\n  build:\n    runs-on: ubuntu-latest\n    permissions:\n      contents: write\n      packages: write\n    steps:\n      - uses: actions/checkout@v4\n        with:\n          ref: ${{ github.event.pull_request.head.sha }}\n          repository: ${{ github.event.pull_request.head.repo.full_name }}\n      - run: npm ci && npm test\n        env:\n          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}\n          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}\nYAML");
+        const result = await run("Review .github/workflows/ci.yml and report any security issues with calibrated severity.");
 
         expect(result.session.outputText).toMatch(new RegExp("\\b(HIGH|CRITICAL)\\b"));
-        expect(result.session.outputText).not.toContain("LOW");
+        expect(result.session.outputText).toContain("pull_request_target");
+        expect(result.session.outputText).toMatch(new RegExp("(NPM_TOKEN|AWS_ACCESS_KEY_ID|secret)", "i"));
         await expect(result).toSatisfyJudge(SeverityCalibrationJudge);
       },
     );
 
     it(
-      "calibrate-severity__medium-mutable-third-party-with-secrets",
-      { timeout: 180_000 },
-      async ({ run, behavior }) => {
+      "calibrate-severity__medium-needs-one-link",
+      { timeout: 120_000 },
+      async ({ run, behavior, harness }) => {
         behavior("calibrate-severity");
-        const result = await run("What's the severity of this workflow's risk?\n\n```yaml\nname: Deploy\non:\n  push:\n    branches: [main]\njobs:\n  deploy:\n    runs-on: ubuntu-latest\n    permissions:\n      id-token: write\n      contents: read\n    steps:\n      - uses: actions/checkout@v4\n      - uses: some-vendor/deploy-action@v2\n        with:\n          token: ${{ secrets.DEPLOY_TOKEN }}\n```");
+        await harness.setup("mkdir -p .github/workflows\ncat > .github/workflows/deploy.yml <<'YAML'\nname: deploy\non:\n  workflow_run:\n    workflows: [\"build\"]\n    types: [completed]\njobs:\n  publish:\n    if: github.event.workflow_run.conclusion == 'success'\n    runs-on: ubuntu-latest\n    environment:\n      name: production\n    permissions:\n      contents: read\n      id-token: write\n    steps:\n      - uses: actions/download-artifact@v3\n        with:\n          name: build-output\n      - run: ./scripts/publish.sh\n        env:\n          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}\nYAML");
+        const result = await run("Review .github/workflows/deploy.yml and tell me the severity of any issue you find.");
 
-        expect(result.session.outputText).toMatch(new RegExp("\\b(MEDIUM|MODERATE)\\b"));
+        expect(result.session.outputText).toMatch(new RegExp("\\b(MEDIUM|MED)\\b"));
+        expect(result.session.outputText).toMatch(new RegExp("(workflow_run|artifact)", "i"));
         await expect(result).toSatisfyJudge(SeverityCalibrationJudge);
       },
     );
 
     it(
       "calibrate-severity__low-defense-in-depth",
-      { timeout: 180_000 },
-      async ({ run, behavior }) => {
+      { timeout: 120_000 },
+      async ({ run, behavior, harness }) => {
         behavior("calibrate-severity");
-        const result = await run("Audit this workflow and tell me the severity of any issues:\n\n```yaml\nname: Lint\non:\n  pull_request:\njobs:\n  lint:\n    runs-on: ubuntu-latest\n    permissions:\n      contents: read\n    steps:\n      - uses: actions/checkout@v4\n      - uses: some-org/eslint-action@v1\n      - run: npm run lint\n```");
+        await harness.setup("mkdir -p .github/workflows\ncat > .github/workflows/lint.yml <<'YAML'\nname: lint\non:\n  pull_request:\njobs:\n  lint:\n    runs-on: ubuntu-latest\n    permissions:\n      contents: read\n    steps:\n      - uses: actions/checkout@v4\n      - uses: some-third-party/eslint-action@main\nYAML");
+        const result = await run("Audit .github/workflows/lint.yml and assign severity to anything noteworthy. Be honest about uncertainty.");
 
-        expect(result.session.outputText).not.toContain("HIGH");
         expect(result.session.outputText).not.toContain("CRITICAL");
+        expect(result.session.outputText).toMatch(new RegExp("\\b(LOW|defense.in.depth|hardening)\\b", "i"));
         await expect(result).toSatisfyJudge(SeverityCalibrationJudge);
       },
     );

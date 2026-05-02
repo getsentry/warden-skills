@@ -19,30 +19,33 @@ describeEval(
   { harness: skilletHarness({ skill: skillRoot }) },
   (it) => {
     it(
-      "no-safe-resolved-values__pr-number-and-sha",
-      { timeout: 180_000 },
-      async ({ run, behavior }) => {
+      "no-safe-resolved-values__pr-number-in-run",
+      { timeout: 90_000 },
+      async ({ run, behavior, harness }) => {
         behavior("no-safe-resolved-values");
-        const result = await run("Audit this workflow for injection risks:\n\n```yaml\nname: PR Notify\non:\n  pull_request_target:\n    types: [opened]\njobs:\n  notify:\n    runs-on: ubuntu-latest\n    permissions:\n      pull-requests: write\n    steps:\n      - name: Log PR number\n        run: echo \"PR #${{ github.event.pull_request.number }} at ${{ github.event.pull_request.head.sha }}\"\n      - name: Comment\n        run: gh pr comment ${{ github.event.pull_request.number }} --body \"Build queued for ${{ github.event.pull_request.head.sha }}\"\n        env:\n          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}\n```");
+        await harness.setup("mkdir -p .github/workflows\ncat > .github/workflows/label.yml <<'YAML'\nname: label\non:\n  pull_request_target:\n    types: [opened]\njobs:\n  tag:\n    runs-on: ubuntu-latest\n    steps:\n      - name: echo number\n        run: echo \"PR number is ${{ github.event.pull_request.number }}\"\nYAML\n");
+        const result = await run("Please review .github/workflows/label.yml for injection risks. I'm worried about github.event.pull_request.number being interpolated into the run script.");
 
-        expect(result.session.outputText).not.toContain("command injection");
+        expect(result.session.outputText).not.toContain("injection");
         expect(result.session.outputText).not.toContain("RCE");
-        expect(result.session.outputText).not.toContain("script injection");
-        expect(result.session.outputText).toMatch(new RegExp("(safe|numeric|full sha|not.*vulnerab|no.*finding|no.*injection|out of scope)", "i"));
+        expect(result.session.outputText).toMatch(new RegExp("\\b(numeric|integer|number|safe|no\\s+finding|not\\s+exploitable|out of scope)\\b", "i"));
+        expect(result.session.outputText).not.toContain("CRITICAL");
+        expect(result.session.outputText).not.toContain("HIGH");
       },
     );
 
     it(
-      "no-safe-resolved-values__base-repo-constants-and-bool",
-      { timeout: 180_000 },
-      async ({ run, behavior }) => {
+      "no-safe-resolved-values__base-sha-and-bool",
+      { timeout: 90_000 },
+      async ({ run, behavior, harness }) => {
         behavior("no-safe-resolved-values");
-        const result = await run("Anything injectable here?\n\n```yaml\nname: Base Constants\non:\n  pull_request_target:\njobs:\n  echo:\n    runs-on: ubuntu-latest\n    if: ${{ github.event.pull_request.draft == false }}\n    steps:\n      - run: echo \"repo=${{ github.repository }} owner=${{ github.repository_owner }} merged=${{ github.event.pull_request.merged }}\"\n```");
+        await harness.setup("mkdir -p .github/workflows\ncat > .github/workflows/build.yml <<'YAML'\nname: build\non:\n  pull_request_target:\njobs:\n  b:\n    runs-on: ubuntu-latest\n    steps:\n      - run: |\n          echo \"base sha: ${{ github.event.pull_request.base.sha }}\"\n          echo \"draft: ${{ github.event.pull_request.draft }}\"\n          echo \"repo: ${{ github.event.repository.full_name }}\"\nYAML\n");
+        const result = await run("Audit .github/workflows/build.yml — it uses github.event.pull_request.base.sha and github.event.pull_request.draft in the run step. Any code injection risk?");
 
-        expect(result.session.outputText).not.toContain("command injection");
-        expect(result.session.outputText).not.toContain("script injection");
-        expect(result.session.outputText).not.toContain("RCE");
-        expect(result.session.outputText).toMatch(new RegExp("(safe|boolean|base.?repo|constant|not.*vulnerab|no.*finding|out of scope)", "i"));
+        expect(result.session.outputText).not.toContain("injection");
+        expect(result.session.outputText).not.toContain("arbitrary code");
+        expect(result.session.outputText).not.toContain("CRITICAL");
+        expect(result.session.outputText).toMatch(new RegExp("\\b(SHA|boolean|constant|safe|no\\s+finding|not\\s+exploitable)\\b", "i"));
       },
     );
   },

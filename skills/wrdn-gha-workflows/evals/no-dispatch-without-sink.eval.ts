@@ -19,39 +19,44 @@ describeEval(
   { harness: skilletHarness({ skill: skillRoot }) },
   (it) => {
     it(
-      "no-dispatch-without-sink__manual-deploy-no-input-sink",
-      async ({ run, behavior }) => {
+      "no-dispatch-without-sink__manual-deploy-bool-input",
+      { timeout: 90_000 },
+      async ({ run, behavior, harness }) => {
         behavior("no-dispatch-without-sink");
-        const result = await run("Please audit this workflow for security issues:\n\n```yaml\nname: Manual Deploy\non:\n  workflow_dispatch:\n    inputs:\n      environment:\n        type: choice\n        options: [staging, production]\njobs:\n  deploy:\n    runs-on: ubuntu-latest\n    environment: ${{ inputs.environment }}\n    steps:\n      - uses: actions/checkout@v4\n      - run: ./scripts/deploy.sh\n        env:\n          TARGET: ${{ inputs.environment }}\n```");
+        await harness.setup("mkdir -p .github/workflows\ncat > .github/workflows/deploy.yml <<'YAML'\nname: Deploy\non:\n  workflow_dispatch:\n    inputs:\n      dry_run:\n        type: boolean\n        default: true\njobs:\n  deploy:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: actions/checkout@v4\n      - name: Echo flag\n        run: echo \"dry_run=${{ inputs.dry_run }}\"\nYAML\n");
+        const result = await run("Review .github/workflows/deploy.yml for any GitHub Actions security issues.");
 
-        expect(result.session.outputText).not.toContain("injection");
         expect(result.session.outputText).not.toContain("RCE");
-        expect(result.session.outputText).not.toContain("code execution");
-        expect(result.session.outputText).toMatch(new RegExp("(no findings|no.*vulnerab|safe|out of scope|no exploitable|no issues)", "i"));
+        expect(result.session.outputText).not.toContain("command injection");
+        expect(result.session.outputText).toMatch(new RegExp("(no\\s+finding|not\\s+exploit|out of scope|safe|no\\s+sink)", "i"));
       },
     );
 
     it(
-      "no-dispatch-without-sink__scheduled-cron-build",
-      async ({ run, behavior }) => {
+      "no-dispatch-without-sink__schedule-readonly",
+      { timeout: 90_000 },
+      async ({ run, behavior, harness }) => {
         behavior("no-dispatch-without-sink");
-        const result = await run("Any security risk in this nightly job?\n\n```yaml\nname: Nightly\non:\n  schedule:\n    - cron: '0 3 * * *'\njobs:\n  build:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: actions/checkout@v4\n      - run: npm ci && npm test\n```");
+        await harness.setup("mkdir -p .github/workflows\ncat > .github/workflows/nightly.yml <<'YAML'\nname: Nightly\non:\n  schedule:\n    - cron: '0 3 * * *'\njobs:\n  build:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: actions/checkout@v4\n      - run: npm ci && npm test\nYAML\n");
+        const result = await run("Any security issues with .github/workflows/nightly.yml?");
 
         expect(result.session.outputText).not.toContain("injection");
-        expect(result.session.outputText).not.toContain("RCE");
-        expect(result.session.outputText).toMatch(new RegExp("(no findings|no.*vulnerab|safe|out of scope|no exploitable|no issues)", "i"));
+        expect(result.session.outputText).toMatch(new RegExp("\\b(schedule|cron)\\b", "i"));
+        expect(result.session.outputText).toMatch(new RegExp("(no\\s+finding|not\\s+exploit|out of scope|safe|no\\s+caller-controlled)", "i"));
       },
     );
 
     it(
-      "no-dispatch-without-sink__protected-push-main",
-      async ({ run, behavior }) => {
+      "no-dispatch-without-sink__protected-push-no-sink",
+      { timeout: 90_000 },
+      async ({ run, behavior, harness }) => {
         behavior("no-dispatch-without-sink");
-        const result = await run("Review this workflow:\n\n```yaml\nname: Release on main\non:\n  push:\n    branches: [main]\njobs:\n  release:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: actions/checkout@v4\n      - run: ./scripts/release.sh\n        env:\n          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}\n```");
+        await harness.setup("mkdir -p .github/workflows\ncat > .github/workflows/release.yml <<'YAML'\nname: Release\non:\n  push:\n    branches: [main]\njobs:\n  release:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: actions/checkout@v4\n      - run: ./scripts/release.sh\nYAML\n");
+        const result = await run("Look at .github/workflows/release.yml and tell me if there is any RCE or injection risk.");
 
-        expect(result.session.outputText).not.toContain("injection");
-        expect(result.session.outputText).not.toContain("pwn");
-        expect(result.session.outputText).toMatch(new RegExp("(no findings|no.*vulnerab|safe|out of scope|no exploitable|no issues|protected)", "i"));
+        expect(result.session.outputText).not.toContain("RCE");
+        expect(result.session.outputText).not.toContain("command injection");
+        expect(result.session.outputText).toMatch(new RegExp("(no\\s+finding|not\\s+exploit|out of scope|safe|no\\s+sink|no\\s+caller-controlled)", "i"));
       },
     );
   },

@@ -19,28 +19,32 @@ describeEval(
   { harness: skilletHarness({ skill: skillRoot }) },
   (it) => {
     it(
-      "no-public-only-mutable-refs__public-readonly-mutable-tag",
-      async ({ run, behavior }) => {
+      "no-public-only-mutable-refs__public-readonly-third-party",
+      { timeout: 120_000 },
+      async ({ run, behavior, harness }) => {
         behavior("no-public-only-mutable-refs");
-        const result = await run("Anything risky in this workflow? It just publishes a public docs site preview from the main branch.\n\n```yaml\nname: Docs Preview\non:\n  push:\n    branches: [main]\njobs:\n  preview:\n    runs-on: ubuntu-latest\n    permissions:\n      contents: read\n    steps:\n      - uses: actions/checkout@v4\n      - uses: actions/setup-node@v4\n        with:\n          node-version: 20\n      - uses: peaceiris/actions-gh-pages@v3\n        with:\n          github_token: ${{ secrets.GITHUB_TOKEN }}\n          publish_dir: ./public\n```\n\nNote: GITHUB_TOKEN here is the default read-only token (no permissions block elevates it beyond contents: read). No other secrets, no OIDC.");
+        await harness.setup("mkdir -p .github/workflows && cat > .github/workflows/build.yml <<'YAML'\nname: build\non:\n  push:\n    branches: [main]\npermissions:\n  contents: read\njobs:\n  build:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: actions/checkout@v4\n      - uses: actions/setup-node@v4\n        with:\n          node-version: '20'\n      - uses: docker/setup-buildx-action@v3\n      - run: echo \"building public docs\"\nYAML\n");
+        const result = await run("Please audit .github/workflows/build.yml for security issues. Report any real findings.");
 
-        expect(result.session.outputText).not.toContain("pin");
-        expect(result.session.outputText).not.toContain("mutable");
-        expect(result.session.outputText).not.toContain("supply chain");
-        expect(result.session.outputText).toMatch(new RegExp("(no findings?|no issues?|safe|out of scope|nothing.*(risky|exploit))", "i"));
+        expect(result.session.outputText).not.toContain("docker/setup-buildx-action@v3");
+        expect(result.session.outputText).not.toContain("mutable ref");
+        expect(result.session.outputText).not.toContain("pin to a full SHA");
+        expect(result.session.outputText).toMatch(new RegExp("(no\\s+findings?|no\\s+issues?|nothing\\s+exploitable|out\\s+of\\s+scope|no\\s+real\\s+security)", "i"));
       },
     );
 
     it(
-      "no-public-only-mutable-refs__first-party-actions-tag",
-      async ({ run, behavior }) => {
+      "no-public-only-mutable-refs__first-party-tag-refs",
+      { timeout: 120_000 },
+      async ({ run, behavior, harness }) => {
         behavior("no-public-only-mutable-refs");
-        const result = await run("Please audit:\n\n```yaml\nname: CI\non: [pull_request]\njobs:\n  test:\n    runs-on: ubuntu-latest\n    permissions:\n      contents: read\n    steps:\n      - uses: actions/checkout@v4\n      - uses: actions/setup-python@v5\n        with:\n          python-version: '3.12'\n      - uses: github/codeql-action/init@v3\n      - run: pytest\n```");
+        await harness.setup("mkdir -p .github/workflows && cat > .github/workflows/ci.yml <<'YAML'\nname: ci\non: [push]\npermissions:\n  contents: read\njobs:\n  test:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: actions/checkout@v4\n      - uses: actions/setup-python@v5\n      - uses: github/codeql-action/init@v3\n      - run: python -m pytest\nYAML\n");
+        const result = await run("Audit this workflow and report any unpinned action references.");
 
-        expect(result.session.outputText).not.toContain("pin");
-        expect(result.session.outputText).not.toContain("SHA");
-        expect(result.session.outputText).not.toContain("mutable");
-        expect(result.session.outputText).toMatch(new RegExp("(no findings?|no issues?|safe|out of scope|nothing.*(risky|exploit))", "i"));
+        expect(result.session.outputText).not.toContain("actions/checkout@v4");
+        expect(result.session.outputText).not.toContain("actions/setup-python@v5");
+        expect(result.session.outputText).not.toContain("github/codeql-action");
+        expect(result.session.outputText).toMatch(new RegExp("(no\\s+findings?|first[- ]party|out\\s+of\\s+scope|no\\s+real\\s+security)", "i"));
       },
     );
   },

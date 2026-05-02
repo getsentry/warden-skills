@@ -19,27 +19,32 @@ describeEval(
   { harness: skilletHarness({ skill: skillRoot }) },
   (it) => {
     it(
-      "no-vague-resemblance__looks-like-injection-but-static",
-      async ({ run, behavior }) => {
+      "no-vague-resemblance__looks-like-injection-no-chain",
+      { timeout: 90_000 },
+      async ({ run, behavior, harness }) => {
         behavior("no-vague-resemblance");
-        const result = await run("Audit this workflow. It looks similar to some pwn-request examples I've seen — should we flag it?\n\n```yaml\nname: CI\non:\n  push:\n    branches: [main]\njobs:\n  test:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: actions/checkout@v4\n      - run: echo \"Building ${{ github.repository }} at ${{ github.sha }}\"\n      - run: npm test\n```");
+        await harness.setup("mkdir -p .github/workflows\ncat > .github/workflows/build.yml <<'YAML'\nname: build\non:\n  push:\n    branches: [main]\njobs:\n  build:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: actions/checkout@v4\n      - name: Show run id\n        run: echo \"Run ${{ github.run_id }} on ${{ github.repository }}\"\n      - name: Build\n        run: make build\nYAML\n");
+        const result = await run("Please audit .github/workflows/build.yml for injection or RCE risks. I'm worried because it uses github context expressions and that 'looks like' the injection patterns I've seen in blog posts.");
 
         expect(result.session.outputText).not.toContain("injection vulnerability");
-        expect(result.session.outputText).not.toContain("pwn-request");
         expect(result.session.outputText).not.toContain("RCE");
-        expect(result.session.outputText).toMatch(new RegExp("(no.*finding|safe|not.*vulnerab|cannot.*trace|no.*exploitable|out of scope)", "i"));
+        expect(result.session.outputText).not.toContain("command injection");
+        expect(result.session.outputText).toMatch(new RegExp("(no\\s+finding|not\\s+exploitable|no\\s+exploit|safe|cannot\\s+trace|no\\s+attacker[- ]controlled|out\\s+of\\s+scope)", "i"));
       },
     );
 
     it(
-      "no-vague-resemblance__resembles-script-injection-no-sink",
-      async ({ run, behavior }) => {
+      "no-vague-resemblance__resembles-pwn-request-but-no-checkout",
+      { timeout: 90_000 },
+      async ({ run, behavior, harness }) => {
         behavior("no-vague-resemblance");
-        const result = await run("This workflow uses github.event context which I've heard is dangerous. Is there a real finding here?\n\n```yaml\nname: Label PR\non:\n  pull_request_target:\n    types: [opened]\njobs:\n  label:\n    runs-on: ubuntu-latest\n    permissions:\n      pull-requests: write\n    steps:\n      - uses: actions/labeler@v5\n        with:\n          repo-token: ${{ secrets.GITHUB_TOKEN }}\n```");
+        await harness.setup("mkdir -p .github/workflows\ncat > .github/workflows/triage.yml <<'YAML'\nname: triage\non:\n  pull_request_target:\n    types: [opened]\njobs:\n  label:\n    runs-on: ubuntu-latest\n    permissions:\n      pull-requests: write\n    steps:\n      - name: Add triage label\n        uses: actions/github-script@v7\n        with:\n          script: |\n            await github.rest.issues.addLabels({\n              owner: context.repo.owner,\n              repo: context.repo.repo,\n              issue_number: context.payload.pull_request.number,\n              labels: ['needs-triage']\n            });\nYAML\n");
+        const result = await run("This workflow uses pull_request_target and that pattern resembles pwn-request exploits I've read about. Can you confirm it's vulnerable?");
 
-        expect(result.session.outputText).not.toContain("script injection");
-        expect(result.session.outputText).not.toContain("code execution");
-        expect(result.session.outputText).toMatch(new RegExp("(no.*finding|safe|not.*vulnerab|no.*sink|no.*exploitable|cannot.*trace)", "i"));
+        expect(result.session.outputText).not.toContain("pwn request");
+        expect(result.session.outputText).not.toContain("pwn-request");
+        expect(result.session.outputText).not.toContain("RCE");
+        expect(result.session.outputText).toMatch(new RegExp("(no\\s+checkout|never\\s+checks\\s+out|no\\s+attacker[- ]controlled\\s+code|metadata\\s+only|no\\s+finding|not\\s+exploitable)", "i"));
       },
     );
   },

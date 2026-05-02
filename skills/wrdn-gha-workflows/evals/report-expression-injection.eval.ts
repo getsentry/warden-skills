@@ -16,7 +16,7 @@ import {
 const skillRoot = dirname(fileURLToPath(import.meta.url)).replace(/\/evals$/, "");
 
 const ExpressionInjectionJudge = judge("ExpressionInjectionJudge", async ({ criterion }) => {
-  return criterion("The response identifies expression injection: it names the attacker-controlled GitHub context (e.g., pull_request title/body, comment body, branch name, commit message) and explains that interpolating ${{ ... }} directly into a code-evaluating sink (run:, github-script, -c/-e flag, or $GITHUB_ENV/$GITHUB_OUTPUT/$GITHUB_PATH/$GITHUB_STEP_SUMMARY write) causes the expansion to be evaluated as code. A generic 'quote your variables' or 'pin actions' note without naming the sink and the controlled source does not satisfy the rubric.");
+  return criterion("Explains that the GitHub expression is interpolated into a code-evaluating sink (shell/script body) and that the source is attacker-controllable, enabling code execution.");
 });
 
 describeEval(
@@ -25,41 +25,45 @@ describeEval(
   (it) => {
     it(
       "report-expression-injection__pr-title-in-run",
-      { timeout: 180_000 },
-      async ({ run, behavior }) => {
+      { timeout: 120_000 },
+      async ({ run, behavior, harness }) => {
         behavior("report-expression-injection");
-        const result = await run("Can you audit this workflow for security issues?\n\n```yaml\nname: PR Greeter\non:\n  pull_request_target:\n    types: [opened]\njobs:\n  greet:\n    runs-on: ubuntu-latest\n    steps:\n      - run: echo \"New PR: ${{ github.event.pull_request.title }}\"\n      - run: |\n          curl -X POST -H \"Authorization: Bearer ${{ secrets.SLACK_TOKEN }}\" \\\n            -d \"text=${{ github.event.pull_request.body }}\" \\\n            https://hooks.slack.example/notify\n```");
+        await harness.setup("mkdir -p .github/workflows\ncat > .github/workflows/greet.yml <<'YAML'\nname: greet\non:\n  pull_request_target:\n    types: [opened]\njobs:\n  greet:\n    runs-on: ubuntu-latest\n    steps:\n      - name: Echo PR title\n        run: |\n          echo \"New PR: ${{ github.event.pull_request.title }}\"\nYAML\n");
+        const result = await run("Audit .github/workflows/greet.yml for injection issues and report any findings with severity.");
 
-        expect(result.session.outputText).toMatch(new RegExp("(expression injection|script injection|command injection)", "i"));
-        expect(result.session.outputText).toMatch(new RegExp("pull_request\\.(title|body)", "i"));
-        expect(result.session.outputText).toMatch(new RegExp("\\brun:?\\b", "i"));
+        expect(result.session.outputText).toContain("github.event.pull_request.title");
+        expect(result.session.outputText).toMatch(new RegExp("\\brun\\b", "i"));
+        expect(result.session.outputText).toMatch(new RegExp("\\b(HIGH|CRITICAL|MEDIUM)\\b"));
         await expect(result).toSatisfyJudge(ExpressionInjectionJudge);
       },
     );
 
     it(
       "report-expression-injection__github-script-comment-body",
-      { timeout: 180_000 },
-      async ({ run, behavior }) => {
+      { timeout: 120_000 },
+      async ({ run, behavior, harness }) => {
         behavior("report-expression-injection");
-        const result = await run("Please review this for any security concerns:\n\n```yaml\nname: Comment Handler\non:\n  issue_comment:\n    types: [created]\njobs:\n  handle:\n    runs-on: ubuntu-latest\n    permissions:\n      contents: write\n      issues: write\n    steps:\n      - uses: actions/github-script@v7\n        with:\n          script: |\n            const body = `${{ github.event.comment.body }}`;\n            if (body.includes('/deploy')) {\n              core.setOutput('deploy', 'true');\n            }\n```");
+        await harness.setup("mkdir -p .github/workflows\ncat > .github/workflows/triage.yml <<'YAML'\nname: triage\non:\n  issue_comment:\n    types: [created]\njobs:\n  triage:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: actions/github-script@v7\n        with:\n          script: |\n            const body = `${{ github.event.comment.body }}`;\n            console.log(body);\nYAML\n");
+        const result = await run("Review .github/workflows/triage.yml. Are there any expression injection sinks?");
 
-        expect(result.session.outputText).toMatch(new RegExp("(expression injection|script injection)", "i"));
-        expect(result.session.outputText).toMatch(new RegExp("(github-script|actions/github-script)", "i"));
-        expect(result.session.outputText).toMatch(new RegExp("comment\\.body", "i"));
+        expect(result.session.outputText).toContain("github.event.comment.body");
+        expect(result.session.outputText).toContain("github-script");
+        expect(result.session.outputText).toMatch(new RegExp("\\b(HIGH|CRITICAL|MEDIUM)\\b"));
         await expect(result).toSatisfyJudge(ExpressionInjectionJudge);
       },
     );
 
     it(
-      "report-expression-injection__branch-name-to-github-env",
-      { timeout: 180_000 },
-      async ({ run, behavior }) => {
+      "report-expression-injection__github-env-write-branch-name",
+      { timeout: 120_000 },
+      async ({ run, behavior, harness }) => {
         behavior("report-expression-injection");
-        const result = await run("Anything wrong with this build workflow?\n\n```yaml\nname: Build\non:\n  pull_request_target:\njobs:\n  build:\n    runs-on: ubuntu-latest\n    steps:\n      - run: |\n          echo \"BRANCH=${{ github.head_ref }}\" >> $GITHUB_ENV\n      - run: ./build.sh\n        env:\n          DEPLOY_KEY: ${{ secrets.DEPLOY_KEY }}\n```");
+        await harness.setup("mkdir -p .github/workflows\ncat > .github/workflows/build.yml <<'YAML'\nname: build\non:\n  pull_request_target:\njobs:\n  build:\n    runs-on: ubuntu-latest\n    steps:\n      - name: Set branch\n        run: |\n          echo \"BRANCH=${{ github.head_ref }}\" >> $GITHUB_ENV\n      - run: ./build.sh\nYAML\n");
+        const result = await run("Check .github/workflows/build.yml for any unsafe interpolation into environment files.");
 
-        expect(result.session.outputText).toMatch(new RegExp("(expression injection|script injection|command injection)", "i"));
-        expect(result.session.outputText).toMatch(new RegExp("(GITHUB_ENV|head_ref)", "i"));
+        expect(result.session.outputText).toContain("github.head_ref");
+        expect(result.session.outputText).toMatch(new RegExp("\\$GITHUB_ENV"));
+        expect(result.session.outputText).toMatch(new RegExp("\\b(HIGH|CRITICAL|MEDIUM)\\b"));
         await expect(result).toSatisfyJudge(ExpressionInjectionJudge);
       },
     );

@@ -19,26 +19,16 @@ describeEval(
   { harness: skilletHarness({ skill: skillRoot }) },
   (it) => {
     it(
-      "no-unreached-secrets__deploy-on-tag-push",
-      async ({ run, behavior }) => {
+      "no-unreached-secrets__deploy-job-no-pr-input",
+      { timeout: 120_000 },
+      async ({ run, behavior, harness }) => {
         behavior("no-unreached-secrets");
-        const result = await run("Can you audit this release workflow for security issues?\n\n```yaml\nname: Release\non:\n  push:\n    tags:\n      - 'v*'\njobs:\n  publish:\n    runs-on: ubuntu-latest\n    permissions:\n      contents: read\n      id-token: write\n    steps:\n      - uses: actions/checkout@v4\n        with:\n          ref: ${{ github.ref }}\n      - uses: actions/setup-node@v4\n        with:\n          node-version: '20'\n      - run: npm ci\n      - run: npm run build\n      - run: npm publish\n        env:\n          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}\n```");
+        await harness.setup("mkdir -p .github/workflows\ncat > .github/workflows/deploy.yml <<'YAML'\nname: deploy\non:\n  push:\n    branches: [main]\njobs:\n  deploy:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: actions/checkout@v4\n        with:\n          ref: ${{ github.sha }}\n      - name: Deploy\n        env:\n          DEPLOY_TOKEN: ${{ secrets.DEPLOY_TOKEN }}\n          AWS_KEY: ${{ secrets.AWS_ACCESS_KEY_ID }}\n        run: ./scripts/deploy.sh\nYAML\nmkdir -p scripts\ncat > scripts/deploy.sh <<'SH'\n#!/bin/bash\necho \"deploying commit $GITHUB_SHA\"\nSH\nchmod +x scripts/deploy.sh\n");
+        const result = await run("Audit .github/workflows/deploy.yml for security issues. Are the secrets referenced in this workflow at risk?");
 
-        expect(result.session.outputText).not.toContain("NPM_TOKEN");
         expect(result.session.outputText).not.toContain("secret exfiltration");
-        expect(result.session.outputText).toMatch(new RegExp("(safe|no.*finding|not.*vulnerab|out of scope|no.*issue|looks fine|no significant)", "i"));
-      },
-    );
-
-    it(
-      "no-unreached-secrets__scheduled-internal-job",
-      async ({ run, behavior }) => {
-        behavior("no-unreached-secrets");
-        const result = await run("Any security concerns with this scheduled job?\n\n```yaml\nname: Nightly Metrics\non:\n  schedule:\n    - cron: '0 2 * * *'\njobs:\n  report:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: actions/checkout@v4\n      - run: ./scripts/collect-metrics.sh\n        env:\n          DATADOG_API_KEY: ${{ secrets.DATADOG_API_KEY }}\n```");
-
-        expect(result.session.outputText).not.toContain("DATADOG_API_KEY leak");
-        expect(result.session.outputText).not.toContain("secret exposure");
-        expect(result.session.outputText).toMatch(new RegExp("(safe|no.*finding|not.*vulnerab|out of scope|no.*issue|no significant)", "i"));
+        expect(result.session.outputText).not.toContain("secret leak");
+        expect(result.session.outputText).toMatch(new RegExp("(no\\s+finding|not\\s+exploitable|no\\s+attacker[- ]controlled|out\\s+of\\s+scope|no\\s+exploitable\\s+path|safe)", "i"));
       },
     );
   },

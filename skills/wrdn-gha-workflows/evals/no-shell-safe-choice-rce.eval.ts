@@ -21,27 +21,30 @@ describeEval(
     it(
       "no-shell-safe-choice-rce__deploy-env-choice",
       { timeout: 90_000 },
-      async ({ run, behavior }) => {
+      async ({ run, behavior, harness }) => {
         behavior("no-shell-safe-choice-rce");
-        const result = await run("Is there an RCE risk in the run step here? The deploy_env input is a choice limited to dev/staging/prod.\n\n```yaml\nname: Deploy\non:\n  workflow_dispatch:\n    inputs:\n      deploy_env:\n        type: choice\n        options:\n          - dev\n          - staging\n          - prod\njobs:\n  deploy:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: actions/checkout@v4\n      - run: ./deploy.sh ${{ inputs.deploy_env }}\n```");
+        await harness.setup("mkdir -p .github/workflows\ncat > .github/workflows/deploy.yml <<'YAML'\nname: deploy\non:\n  workflow_dispatch:\n    inputs:\n      environment:\n        description: target env\n        required: true\n        type: choice\n        options:\n          - staging\n          - production\n          - canary\njobs:\n  deploy:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: actions/checkout@v4\n      - name: Deploy\n        run: ./scripts/deploy.sh ${{ inputs.environment }}\nYAML\n");
+        const result = await run("Audit .github/workflows/deploy.yml for command injection or RCE via the workflow_dispatch inputs.");
 
         expect(result.session.outputText).not.toContain("RCE");
-        expect(result.session.outputText).not.toContain("remote code execution");
         expect(result.session.outputText).not.toContain("command injection");
-        expect(result.session.outputText).toMatch(new RegExp("(safe|hardening|no.*finding|not.*vulnerab|constrained|allow.?list|fixed set)", "i"));
+        expect(result.session.outputText).not.toContain("remote code execution");
+        expect(result.session.outputText).toMatch(new RegExp("(no\\s+finding|not\\s+exploitabl|hardening|out of scope|safe|no\\s+vulnerab)", "i"));
       },
     );
 
     it(
-      "no-shell-safe-choice-rce__log-level-choice",
+      "no-shell-safe-choice-rce__loglevel-choice-in-run",
       { timeout: 90_000 },
-      async ({ run, behavior }) => {
+      async ({ run, behavior, harness }) => {
         behavior("no-shell-safe-choice-rce");
-        const result = await run("Please audit this workflow. The log_level input is a hardcoded choice (debug/info/warn/error). Any injection vulnerability?\n\n```yaml\non:\n  workflow_dispatch:\n    inputs:\n      log_level:\n        type: choice\n        options: [debug, info, warn, error]\njobs:\n  run:\n    runs-on: ubuntu-latest\n    steps:\n      - run: echo \"level=${{ inputs.log_level }}\" && ./tool --log ${{ inputs.log_level }}\n```");
+        await harness.setup("mkdir -p .github/workflows\ncat > .github/workflows/ci.yml <<'YAML'\nname: ci\non:\n  workflow_dispatch:\n    inputs:\n      loglevel:\n        type: choice\n        options: [debug, info, warn, error]\njobs:\n  build:\n    runs-on: ubuntu-latest\n    steps:\n      - run: echo \"level=${{ inputs.loglevel }}\" && make build LOGLEVEL=${{ inputs.loglevel }}\nYAML\n");
+        const result = await run("Is there an injection bug in this workflow where inputs.loglevel flows into a run: step?");
 
-        expect(result.session.outputText).not.toContain("injection vulnerability");
-        expect(result.session.outputText).not.toContain("arbitrary code");
-        expect(result.session.outputText).toMatch(new RegExp("\\b(LOW|INFO|NONE|HARDENING)\\b|(no.*finding|not.*exploitable|safe|hardening only)", "i"));
+        expect(result.session.outputText).not.toContain("RCE");
+        expect(result.session.outputText).not.toContain("command injection");
+        expect(result.session.outputText).not.toContain("arbitrary code execution");
+        expect(result.session.outputText).toMatch(new RegExp("(no\\s+finding|not\\s+exploitabl|hardening|safe|out of scope)", "i"));
       },
     );
   },

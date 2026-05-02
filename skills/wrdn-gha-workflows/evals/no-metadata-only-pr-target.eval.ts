@@ -19,29 +19,33 @@ describeEval(
   { harness: skilletHarness({ skill: skillRoot }) },
   (it) => {
     it(
-      "no-metadata-only-pr-target__auto-label",
+      "no-metadata-only-pr-target__labeler",
       { timeout: 120_000 },
-      async ({ run, behavior }) => {
+      async ({ run, behavior, harness }) => {
         behavior("no-metadata-only-pr-target");
-        const result = await run("Please audit this workflow for security issues:\n\n```yaml\nname: Auto Label\non:\n  pull_request_target:\n    types: [opened, reopened]\njobs:\n  label:\n    runs-on: ubuntu-latest\n    permissions:\n      pull-requests: write\n    steps:\n      - uses: actions/labeler@v5\n        with:\n          repo-token: ${{ secrets.GITHUB_TOKEN }}\n```");
+        await harness.setup("mkdir -p .github/workflows\ncat > .github/workflows/labeler.yml <<'YAML'\nname: Labeler\non:\n  pull_request_target:\n    types: [opened, reopened, synchronize]\n\npermissions:\n  contents: read\n  pull-requests: write\n\njobs:\n  label:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: actions/labeler@v5\n        with:\n          repo-token: ${{ secrets.GITHUB_TOKEN }}\nYAML\n");
+        const result = await run("Please audit .github/workflows/labeler.yml for security issues.");
 
-        expect(result.session.outputText).not.toContain("pwn-request");
         expect(result.session.outputText).not.toContain("RCE");
         expect(result.session.outputText).not.toContain("code execution");
-        expect(result.session.outputText).toMatch(new RegExp("(no findings?|no vulnerab|safe|metadata.only|does not check ?out|no.*checkout)", "i"));
+        expect(result.session.outputText).not.toContain("pwn request");
+        expect(result.session.outputText).not.toContain("pwn-request");
+        expect(result.session.outputText).toMatch(new RegExp("(no\\s+find|not\\s+vulnerab|safe|out of scope|no\\s+exploit|metadata[- ]only)", "i"));
       },
     );
 
     it(
-      "no-metadata-only-pr-target__welcome-comment",
+      "no-metadata-only-pr-target__comment-only",
       { timeout: 120_000 },
-      async ({ run, behavior }) => {
+      async ({ run, behavior, harness }) => {
         behavior("no-metadata-only-pr-target");
-        const result = await run("Any security issues here?\n\n```yaml\nname: Welcome\non:\n  pull_request_target:\n    types: [opened]\njobs:\n  welcome:\n    runs-on: ubuntu-latest\n    permissions:\n      pull-requests: write\n    steps:\n      - uses: actions/github-script@v7\n        with:\n          script: |\n            github.rest.issues.createComment({\n              issue_number: context.issue.number,\n              owner: context.repo.owner,\n              repo: context.repo.repo,\n              body: 'Thanks for your contribution!'\n            })\n```");
+        await harness.setup("mkdir -p .github/workflows\ncat > .github/workflows/welcome.yml <<'YAML'\nname: Welcome\non:\n  pull_request_target:\n    types: [opened]\n\npermissions:\n  pull-requests: write\n\njobs:\n  greet:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: actions/github-script@v7\n        with:\n          script: |\n            github.rest.issues.createComment({\n              issue_number: context.issue.number,\n              owner: context.repo.owner,\n              repo: context.repo.repo,\n              body: 'Thanks for your contribution!'\n            })\nYAML\n");
+        const result = await run("Is .github/workflows/welcome.yml exploitable?");
 
-        expect(result.session.outputText).not.toContain("pwn-request");
-        expect(result.session.outputText).not.toContain("injection vulnerability");
-        expect(result.session.outputText).toMatch(new RegExp("(no findings?|no vulnerab|safe|metadata.only|hardcoded|no PR.controlled)", "i"));
+        expect(result.session.outputText).not.toContain("RCE");
+        expect(result.session.outputText).not.toContain("arbitrary code");
+        expect(result.session.outputText).not.toContain("CRITICAL");
+        expect(result.session.outputText).toMatch(new RegExp("(no\\s+find|not\\s+vulnerab|safe|out of scope|metadata[- ]only|no\\s+checkout)", "i"));
       },
     );
   },

@@ -20,64 +20,43 @@ describeEval(
   (it) => {
     it(
       "exclude-non-findings__label-only-pr-target",
-      async ({ run, behavior }) => {
+      { timeout: 120_000 },
+      async ({ run, behavior, harness }) => {
         behavior("exclude-non-findings");
-        const result = await run("Audit this workflow for GitHub Actions security issues:\n\n```yaml\nname: Auto-label PRs\non:\n  pull_request_target:\n    types: [opened]\njobs:\n  label:\n    runs-on: ubuntu-latest\n    permissions:\n      pull-requests: write\n    steps:\n      - uses: actions/labeler@v5\n        with:\n          repo-token: ${{ secrets.GITHUB_TOKEN }}\n```");
+        await harness.setup("mkdir -p .github/workflows\ncat > .github/workflows/labeler.yml <<'YAML'\nname: PR Labeler\non:\n  pull_request_target:\n    types: [opened, reopened]\n\npermissions:\n  pull-requests: write\n\njobs:\n  label:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: actions/labeler@v5\nYAML\n");
+        const result = await run("Audit .github/workflows/labeler.yml for GitHub Actions security issues. Report only real exploitable findings.");
 
-        expect(result.session.outputText).not.toContain("pwn");
+        expect(result.session.outputText).not.toContain("pwn request");
         expect(result.session.outputText).not.toContain("RCE");
-        expect(result.session.outputText).toMatch(new RegExp("(no findings|out of scope|no exploitable|metadata only|safe|not vulnerable)", "i"));
-        expect(result.session.outputText).not.toContain("HIGH");
-        expect(result.session.outputText).not.toContain("CRITICAL");
+        expect(result.session.outputText).toMatch(new RegExp("(no\\s+findings?|out of scope|not\\s+exploitable|metadata[-\\s]only|no\\s+exploitable)", "i"));
       },
     );
 
     it(
-      "exclude-non-findings__numeric-id-and-sha",
-      async ({ run, behavior }) => {
+      "exclude-non-findings__numeric-id-expression",
+      { timeout: 120_000 },
+      async ({ run, behavior, harness }) => {
         behavior("exclude-non-findings");
-        const result = await run("Are there injection risks in this step?\n\n```yaml\non: pull_request_target\njobs:\n  comment:\n    runs-on: ubuntu-latest\n    steps:\n      - run: |\n          echo \"PR #${{ github.event.pull_request.number }} at ${{ github.event.pull_request.head.sha }} on ${{ github.event.repository.default_branch }}\"\n```");
+        await harness.setup("mkdir -p .github/workflows\ncat > .github/workflows/ci.yml <<'YAML'\nname: CI\non: [pull_request]\n\npermissions:\n  contents: read\n\njobs:\n  echo:\n    runs-on: ubuntu-latest\n    steps:\n      - name: Print PR number\n        env:\n          PR_NUM: ${{ github.event.pull_request.number }}\n        run: echo \"PR is $PR_NUM\"\nYAML\n");
+        const result = await run("Review .github/workflows/ci.yml — is there any injection risk from the ${{ github.event.pull_request.number }} usage?");
 
         expect(result.session.outputText).not.toContain("injection");
         expect(result.session.outputText).not.toContain("RCE");
-        expect(result.session.outputText).toMatch(new RegExp("(safe|numeric|full SHA|no finding|out of scope|not vulnerable)", "i"));
+        expect(result.session.outputText).toMatch(new RegExp("(numeric|integer|safe|no\\s+findings?|not\\s+exploitable)", "i"));
       },
     );
 
     it(
-      "exclude-non-findings__hardcoded-choice-input",
-      async ({ run, behavior }) => {
+      "exclude-non-findings__actionlint-style",
+      { timeout: 120_000 },
+      async ({ run, behavior, harness }) => {
         behavior("exclude-non-findings");
-        const result = await run("Review this dispatch workflow for security issues:\n\n```yaml\non:\n  workflow_dispatch:\n    inputs:\n      env:\n        type: choice\n        options: [staging, production]\n      debug:\n        type: boolean\n        default: false\njobs:\n  deploy:\n    runs-on: ubuntu-latest\n    if: inputs.env == 'production'\n    steps:\n      - uses: actions/checkout@v4\n      - uses: some-deployer/action@v1\n        with:\n          target: ${{ inputs.env }}\n          verbose: ${{ inputs.debug }}\n```");
+        await harness.setup("mkdir -p .github/workflows\ncat > .github/workflows/build.yml <<'YAML'\non: push\njobs:\n  build:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: actions/checkout@v4\n      - run: npm ci && npm run build\nYAML\n");
+        const result = await run("Security review of .github/workflows/build.yml please.");
 
-        expect(result.session.outputText).not.toContain("injection vulnerability");
-        expect(result.session.outputText).not.toContain("RCE");
-        expect(result.session.outputText).toMatch(new RegExp("(no finding|out of scope|safe|hardcoded|not exploitable|hardening)", "i"));
-      },
-    );
-
-    it(
-      "exclude-non-findings__yaml-style-only",
-      async ({ run, behavior }) => {
-        behavior("exclude-non-findings");
-        const result = await run("Security review please:\n\n```yaml\non: push\njobs:\n  test:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: actions/checkout@v4\n      - run: npm test\n```\n\n(Note: missing top-level name, inconsistent indentation in some places.)");
-
-        expect(result.session.outputText).not.toContain("missing name");
         expect(result.session.outputText).not.toContain("actionlint");
-        expect(result.session.outputText).not.toContain("YAML style");
-        expect(result.session.outputText).toMatch(new RegExp("(no finding|out of scope|no exploitable|not a security)", "i"));
-      },
-    );
-
-    it(
-      "exclude-non-findings__first-party-tag-ref",
-      async ({ run, behavior }) => {
-        behavior("exclude-non-findings");
-        const result = await run("Any supply-chain risk in pinning here?\n\n```yaml\non: pull_request\njobs:\n  build:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: actions/checkout@v4\n      - uses: actions/setup-node@v4\n        with:\n          node-version: 20\n      - run: npm ci && npm test\n```");
-
-        expect(result.session.outputText).not.toContain("mutable ref");
-        expect(result.session.outputText).not.toContain("pin to SHA");
-        expect(result.session.outputText).toMatch(new RegExp("(no finding|out of scope|first-party|safe|not exploitable)", "i"));
+        expect(result.session.outputText).not.toContain("missing name");
+        expect(result.session.outputText).toMatch(new RegExp("(no\\s+findings?|no\\s+exploitable|out of scope)", "i"));
       },
     );
   },

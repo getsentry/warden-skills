@@ -20,27 +20,31 @@ describeEval(
   (it) => {
     it(
       "no-policy-gaps-without-path__missing-branch-protection",
-      async ({ run, behavior }) => {
+      { timeout: 90_000 },
+      async ({ run, behavior, harness }) => {
         behavior("no-policy-gaps-without-path");
-        const result = await run("Audit this workflow for security issues:\n\n```yaml\nname: CI\non:\n  push:\n    branches: [main]\njobs:\n  test:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: actions/checkout@v4\n      - run: npm test\n```\n\nNote: this repo doesn't have branch protection rules or CODEOWNERS configured.");
+        await harness.setup("mkdir -p .github/workflows\ncat > .github/workflows/ci.yml <<'EOF'\nname: CI\non:\n  push:\n    branches: [main]\n  pull_request:\n\njobs:\n  test:\n    runs-on: ubuntu-latest\n    permissions:\n      contents: read\n    steps:\n      - uses: actions/checkout@v4\n      - run: npm ci\n      - run: npm test\nEOF\n");
+        const result = await run("Review .github/workflows/ci.yml for security issues. Should I be worried that the main branch has no required reviewers or branch protection rules configured?");
 
         expect(result.session.outputText).not.toContain("branch protection");
-        expect(result.session.outputText).not.toContain("CODEOWNERS");
         expect(result.session.outputText).not.toContain("required reviewers");
-        expect(result.session.outputText).toMatch(new RegExp("(no.*finding|no.*issue|out of scope|nothing.*exploit|no.*vulnerab)", "i"));
+        expect(result.session.outputText).not.toContain("CODEOWNERS");
+        expect(result.session.outputText).toMatch(new RegExp("(no\\s+finding|out of scope|nothing\\s+exploitable|no\\s+exploitable|safe)", "i"));
       },
     );
 
     it(
-      "no-policy-gaps-without-path__no-org-policy-recommendations",
-      async ({ run, behavior }) => {
+      "no-policy-gaps-without-path__org-policy-gap",
+      { timeout: 90_000 },
+      async ({ run, behavior, harness }) => {
         behavior("no-policy-gaps-without-path");
-        const result = await run("Please review:\n\n```yaml\nname: Lint\non: [push]\njobs:\n  lint:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: actions/checkout@v4\n      - run: npm run lint\n```");
+        await harness.setup("mkdir -p .github/workflows\ncat > .github/workflows/release.yml <<'EOF'\nname: Release\non:\n  push:\n    tags: ['v*']\n\njobs:\n  publish:\n    runs-on: ubuntu-latest\n    permissions:\n      contents: read\n    steps:\n      - uses: actions/checkout@v4\n      - run: echo \"Building release ${GITHUB_REF_NAME}\"\nEOF\n");
+        const result = await run("Audit .github/workflows/release.yml. The org doesn't enforce signed commits or restrict who can approve PRs — flag any policy gaps you see.");
 
-        expect(result.session.outputText).not.toContain("organization policy");
+        expect(result.session.outputText).not.toContain("signed commits");
         expect(result.session.outputText).not.toContain("branch protection");
-        expect(result.session.outputText).not.toContain("required review");
         expect(result.session.outputText).not.toContain("CODEOWNERS");
+        expect(result.session.outputText).toMatch(new RegExp("(no\\s+finding|out of scope|not\\s+a\\s+workflow\\s+issue|no\\s+exploitable\\s+path)", "i"));
       },
     );
   },

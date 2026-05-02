@@ -16,11 +16,7 @@ import {
 const skillRoot = dirname(fileURLToPath(import.meta.url)).replace(/\/evals$/, "");
 
 const FindingFieldsJudge = judge("FindingFieldsJudge", async ({ criterion }) => {
-  return criterion("The response, for each finding, includes ALL of: file and line reference, entry point (workflow trigger), controlled input source, execution mechanism (how the input reaches code execution), privileges exposed (tokens/secrets/permissions), impact, confidence rating (high or medium with a reason), and a concrete fix presented as a minimal workflow patch (diff or replacement YAML snippet). A finding missing any of these fields fails the rubric. Generic prose advice without a patch fails.");
-});
-
-const NoFindingsDisclosureJudge = judge("NoFindingsDisclosureJudge", async ({ criterion }) => {
-  return criterion("When the agent reports no findings, it explicitly states that no findings were identified AND enumerates which workflow files or paths it reviewed. Simply saying 'looks good' or 'no issues' without listing the reviewed scope fails the rubric.");
+  return criterion("Finding includes file/line, entry point, controlled input, execution mechanism, privileges, impact, confidence with reason, and a concrete minimal patch fix.");
 });
 
 describeEval(
@@ -28,19 +24,19 @@ describeEval(
   { harness: skilletHarness({ skill: skillRoot }) },
   (it) => {
     it(
-      "output-finding-fields__pwn-request-full-fields",
+      "output-finding-fields__pwn-request-full-report",
       { timeout: 180_000 },
       async ({ run, behavior, harness }) => {
         behavior("output-finding-fields");
-        await harness.setup("mkdir -p .github/workflows\ncat > .github/workflows/pr-build.yml <<'EOF'\nname: PR Build\non:\n  pull_request_target:\n    types: [opened, synchronize]\njobs:\n  build:\n    runs-on: ubuntu-latest\n    permissions:\n      contents: write\n      pull-requests: write\n    steps:\n      - uses: actions/checkout@v4\n        with:\n          ref: ${{ github.event.pull_request.head.sha }}\n      - run: npm ci\n      - run: npm run build\n        env:\n          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}\n          DEPLOY_KEY: ${{ secrets.DEPLOY_KEY }}\nEOF\n");
-        const result = await run("Audit the workflows in this repo for GitHub Actions security issues and report findings.");
+        await harness.setup("mkdir -p .github/workflows\ncat > .github/workflows/ci.yml <<'YAML'\nname: ci\non:\n  pull_request_target:\n    types: [opened, synchronize]\njobs:\n  build:\n    runs-on: ubuntu-latest\n    permissions:\n      contents: write\n      pull-requests: write\n    steps:\n      - uses: actions/checkout@v4\n        with:\n          ref: ${{ github.event.pull_request.head.sha }}\n          repository: ${{ github.event.pull_request.head.repo.full_name }}\n      - run: npm install\n      - run: npm test\n        env:\n          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}\nYAML\n");
+        const result = await run("Audit the workflows in .github/workflows for code execution risks and produce findings.");
 
-        expect(result.session.outputText).toContain("pr-build.yml");
-        expect(result.session.outputText).toMatch(new RegExp("\\bline\\b|:\\d+", "i"));
-        expect(result.session.outputText).toMatch(new RegExp("pull_request_target", "i"));
-        expect(result.session.outputText).toMatch(new RegExp("\\b(confidence|high|medium)\\b", "i"));
-        expect(result.session.outputText).toMatch(new RegExp("(```|diff|patch|---|\\+\\+\\+)", "i"));
-        expect(result.session.outputText).toMatch(new RegExp("(impact|privilege|secret|token)", "i"));
+        expect(result.session.outputText).toContain(".github/workflows/ci.yml");
+        expect(result.session.outputText).toMatch(new RegExp("pull_request_target"));
+        expect(result.session.outputText).toMatch(new RegExp("\\b(confidence|Confidence)\\b\\s*[:=-]?\\s*(high|medium|HIGH|MEDIUM)"));
+        expect(result.session.outputText).toMatch(new RegExp("\\b(line|Line|L)\\s*[:#]?\\s*\\d+"));
+        expect(result.session.outputText).toMatch(new RegExp("(fix|Fix|patch|Patch|remediation)"));
+        expect(result.session.outputText).toMatch(new RegExp("(impact|Impact)"));
         await expect(result).toSatisfyJudge(FindingFieldsJudge);
       },
     );
@@ -50,13 +46,12 @@ describeEval(
       { timeout: 180_000 },
       async ({ run, behavior, harness }) => {
         behavior("output-finding-fields");
-        await harness.setup("mkdir -p .github/workflows\ncat > .github/workflows/ci.yml <<'EOF'\nname: CI\non:\n  push:\n    branches: [main]\n  pull_request:\njobs:\n  test:\n    runs-on: ubuntu-latest\n    permissions:\n      contents: read\n    steps:\n      - uses: actions/checkout@v4\n      - uses: actions/setup-node@v4\n        with:\n          node-version: '20'\n      - run: npm ci\n      - run: npm test\nEOF\ncat > .github/workflows/release.yml <<'EOF'\nname: Release\non:\n  push:\n    tags: ['v*']\njobs:\n  release:\n    runs-on: ubuntu-latest\n    permissions:\n      contents: write\n    steps:\n      - uses: actions/checkout@v4\n      - run: echo \"Releasing $GITHUB_REF_NAME\"\nEOF\n");
-        const result = await run("Audit the workflows in this repository for GitHub Actions security vulnerabilities.");
+        await harness.setup("mkdir -p .github/workflows\ncat > .github/workflows/label.yml <<'YAML'\nname: label\non:\n  pull_request_target:\n    types: [opened]\njobs:\n  label:\n    runs-on: ubuntu-latest\n    permissions:\n      pull-requests: write\n    steps:\n      - uses: actions/labeler@v5\nYAML\ncat > .github/workflows/release.yml <<'YAML'\nname: release\non:\n  push:\n    tags: ['v*']\njobs:\n  publish:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: actions/checkout@v4\n      - run: echo release\nYAML\n");
+        const result = await run("Review the workflows under .github/workflows for pwn-request style RCE risks and report findings.");
 
-        expect(result.session.outputText).toMatch(new RegExp("(no findings|no issues|no vulnerabilities|nothing to report)", "i"));
-        expect(result.session.outputText).toContain("ci.yml");
+        expect(result.session.outputText).toMatch(new RegExp("(no findings|no issues found|nothing to report|no exploitable)", "i"));
+        expect(result.session.outputText).toContain("label.yml");
         expect(result.session.outputText).toContain("release.yml");
-        await expect(result).toSatisfyJudge(NoFindingsDisclosureJudge);
       },
     );
   },

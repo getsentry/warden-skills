@@ -20,28 +20,32 @@ describeEval(
   (it) => {
     it(
       "no-yaml-lint__missing-name-and-style",
-      async ({ run, behavior }) => {
+      { timeout: 90_000 },
+      async ({ run, behavior, harness }) => {
         behavior("no-yaml-lint");
-        const result = await run("Can you audit this workflow for security issues?\n\n```yaml\non:\n  push:\n    branches: [main]\njobs:\n  build:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: actions/checkout@v4\n      - run: echo \"hello\"\n      - run: echo \"done\"\n```");
+        await harness.setup("mkdir -p .github/workflows\ncat > .github/workflows/build.yml <<'YAML'\non:\n  push:\n    branches: [main]\njobs:\n  build:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: actions/checkout@v4\n      - run: |\n           echo \"hello\"\n           npm test\nYAML\n");
+        const result = await run("Please audit .github/workflows/build.yml for security issues.");
 
-        expect(result.session.outputText).not.toContain("missing name");
         expect(result.session.outputText).not.toContain("actionlint");
+        expect(result.session.outputText).not.toContain("missing name");
         expect(result.session.outputText).not.toContain("YAML style");
-        expect(result.session.outputText).not.toContain("should have a name");
-        expect(result.session.outputText).toMatch(new RegExp("(no.*finding|no.*security.*issue|no.*vulnerab|nothing.*exploitable|out of scope|safe)", "i"));
+        expect(result.session.outputText).not.toContain("indentation");
+        expect(result.session.outputText).toMatch(new RegExp("(no\\s+(security\\s+)?finding|nothing\\s+exploitable|out of scope|no\\s+actionable|safe)", "i"));
       },
     );
 
     it(
-      "no-yaml-lint__inconsistent-indentation",
-      async ({ run, behavior }) => {
+      "no-yaml-lint__explicit-lint-request",
+      { timeout: 90_000 },
+      async ({ run, behavior, harness }) => {
         behavior("no-yaml-lint");
-        const result = await run("Please review this workflow for security problems:\n\n```yaml\nname: CI\non: [push]\njobs:\n  test:\n    runs-on: ubuntu-latest\n    steps:\n        - uses: actions/checkout@v4\n        - run: npm test\n```");
+        await harness.setup("mkdir -p .github/workflows\ncat > .github/workflows/release.yml <<'YAML'\non:\n  push:\n    tags: ['v*']\njobs:\n  release:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: actions/checkout@v4\n      - run: ./scripts/release.sh\nYAML\n");
+        const result = await run("Lint .github/workflows/release.yml and tell me about formatting problems, missing job names, or any actionlint warnings.");
 
-        expect(result.session.outputText).not.toContain("indentation");
+        expect(result.session.outputText).not.toContain("actionlint");
         expect(result.session.outputText).not.toContain("formatting");
-        expect(result.session.outputText).not.toContain("lint");
-        expect(result.session.outputText).toMatch(new RegExp("(no.*finding|no.*security.*issue|no.*vulnerab|nothing.*exploitable|safe)", "i"));
+        expect(result.session.outputText).not.toContain("missing name");
+        expect(result.session.outputText).toMatch(new RegExp("(out of scope|not\\s+a\\s+security|no\\s+(security\\s+)?finding|focus\\s+on\\s+security)", "i"));
       },
     );
   },

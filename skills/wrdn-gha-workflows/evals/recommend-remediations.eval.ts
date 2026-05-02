@@ -15,8 +15,8 @@ import {
 
 const skillRoot = dirname(fileURLToPath(import.meta.url)).replace(/\/evals$/, "");
 
-const RemediationQualityJudge = judge("RemediationQualityJudge", async ({ criterion }) => {
-  return criterion("The response provides a concrete, minimal patch that matches the canonical safe pattern for the vulnerability shown (e.g. moving untrusted input into env: and quoting via printf '%s\\n' \"$VAR\" for shell injection; using process.env in actions/github-script; pinning third-party actions to a 40-char commit SHA; constraining workflow_dispatch inputs with type: choice; gating on author_association; pinning checkout to an approved SHA; declaring workflow_call.secrets explicitly). A vague suggestion like 'sanitize input' or 'be careful' does not satisfy the rubric — the fix must be specific and directly applicable.");
+const RemediationConcreteJudge = judge("RemediationConcreteJudge", async ({ criterion }) => {
+  return criterion("Recommends a concrete safe patch matching the bad shape (e.g. env: + quoted $VAR for run, process.env for github-script). Generic 'sanitize input' advice does not satisfy.");
 });
 
 describeEval(
@@ -24,40 +24,45 @@ describeEval(
   { harness: skilletHarness({ skill: skillRoot }) },
   (it) => {
     it(
-      "recommend-remediations__shell-injection-env-quoting",
-      { timeout: 180_000 },
-      async ({ run, behavior }) => {
+      "recommend-remediations__run-script-injection",
+      { timeout: 120_000 },
+      async ({ run, behavior, harness }) => {
         behavior("recommend-remediations");
-        const result = await run("Please audit this workflow and tell me how to fix any issues:\n\n```yaml\nname: Issue Triage\non:\n  issues:\n    types: [opened]\njobs:\n  triage:\n    runs-on: ubuntu-latest\n    permissions:\n      issues: write\n    steps:\n      - run: |\n          echo \"Title: ${{ github.event.issue.title }}\"\n          gh issue comment ${{ github.event.issue.number }} --body \"Got: ${{ github.event.issue.title }}\"\n        env:\n          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}\n```");
+        await harness.setup("mkdir -p .github/workflows\ncat > .github/workflows/triage.yml <<'YAML'\nname: triage\non:\n  issue_comment:\n    types: [created]\njobs:\n  echo:\n    runs-on: ubuntu-latest\n    steps:\n      - name: greet\n        run: echo \"hello ${{ github.event.comment.body }}\"\nYAML\n");
+        const result = await run("Review .github/workflows/triage.yml and tell me how to fix any injection issues you find.");
 
-        expect(result.session.outputText).toMatch(new RegExp("\\benv:\\b"));
-        expect(result.session.outputText).toMatch(new RegExp("printf\\s+['\"]%s"));
-        await expect(result).toSatisfyJudge(RemediationQualityJudge);
+        expect(result.session.outputText).toContain("env:");
+        expect(result.session.outputText).toMatch(new RegExp("printf\\s+'%s"));
+        expect(result.session.outputText).toMatch(new RegExp("\\$\\{?[A-Z_]+\\}?|\"\\$[A-Z_]+\""));
+        await expect(result).toSatisfyJudge(RemediationConcreteJudge);
       },
     );
 
     it(
       "recommend-remediations__github-script-process-env",
-      { timeout: 180_000 },
-      async ({ run, behavior }) => {
+      { timeout: 120_000 },
+      async ({ run, behavior, harness }) => {
         behavior("recommend-remediations");
-        const result = await run("What's the right fix for this workflow?\n\n```yaml\nname: PR Comment Bot\non:\n  pull_request_target:\n    types: [opened]\njobs:\n  greet:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: actions/github-script@v7\n        with:\n          script: |\n            const title = \"${{ github.event.pull_request.title }}\";\n            console.log(`PR title: ${title}`);\n```");
+        await harness.setup("mkdir -p .github/workflows\ncat > .github/workflows/comment.yml <<'YAML'\nname: comment\non:\n  issues:\n    types: [opened]\njobs:\n  reply:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: actions/github-script@v7\n        with:\n          script: |\n            const title = `${{ github.event.issue.title }}`;\n            console.log(title);\nYAML\n");
+        const result = await run("How should I fix the actions/github-script step in .github/workflows/comment.yml that interpolates the issue title?");
 
-        expect(result.session.outputText).toMatch(new RegExp("process\\.env", "i"));
-        expect(result.session.outputText).toMatch(new RegExp("\\benv:\\b"));
-        await expect(result).toSatisfyJudge(RemediationQualityJudge);
+        expect(result.session.outputText).toContain("process.env");
+        expect(result.session.outputText).toContain("env:");
+        await expect(result).toSatisfyJudge(RemediationConcreteJudge);
       },
     );
 
     it(
-      "recommend-remediations__third-party-action-sha-pin",
-      { timeout: 180_000 },
-      async ({ run, behavior }) => {
+      "recommend-remediations__pin-action-sha",
+      { timeout: 120_000 },
+      async ({ run, behavior, harness }) => {
         behavior("recommend-remediations");
-        const result = await run("How should I harden this workflow that uses a third-party action and handles a deploy token?\n\n```yaml\nname: Deploy\non:\n  push:\n    branches: [main]\njobs:\n  deploy:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: actions/checkout@v4\n      - uses: some-vendor/deploy-action@v2\n        with:\n          token: ${{ secrets.DEPLOY_TOKEN }}\n```");
+        await harness.setup("mkdir -p .github/workflows\ncat > .github/workflows/deploy.yml <<'YAML'\nname: deploy\non: [push]\npermissions:\n  id-token: write\n  contents: write\njobs:\n  release:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: actions/checkout@v4\n      - uses: some-vendor/deploy-action@v1\n        env:\n          AWS_ROLE: ${{ secrets.AWS_ROLE }}\nYAML\n");
+        const result = await run("The deploy workflow uses a third-party action by tag and has access to AWS OIDC + write tokens. What's the fix?");
 
-        expect(result.session.outputText).toMatch(new RegExp("(commit\\s+SHA|40[- ]char|full[- ]length\\s+SHA)", "i"));
-        await expect(result).toSatisfyJudge(RemediationQualityJudge);
+        expect(result.session.outputText).toMatch(new RegExp("\\b[0-9a-f]{40}\\b|40[- ]char(acter)?\\s+(commit\\s+)?SHA", "i"));
+        expect(result.session.outputText).toMatch(new RegExp("some-vendor/deploy-action@"));
+        await expect(result).toSatisfyJudge(RemediationConcreteJudge);
       },
     );
   },
