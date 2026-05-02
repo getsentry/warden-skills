@@ -13,7 +13,7 @@ import {
 } from "@sentry/skillet/evals";
 import {
   DoesNotFlagUnreachedSecretsJudge,
-  ExplainsSecretsNotReachableJudge,
+  ExplainsSecretNotReachableJudge,
 } from "./_judges.js";
 
 const skillRoot = dirname(fileURLToPath(import.meta.url)).replace(/\/evals$/, "");
@@ -23,15 +23,15 @@ describeEval(
   { harness: skilletHarness({ skill: skillRoot }) },
   (it) => {
     it(
-      "no-unreached-secrets__publish-job-isolated-from-pr-build",
+      "no-unreached-secrets__scheduled-internal-job",
       { timeout: 120_000 },
       async ({ run, behavior, harness }) => {
         behavior("no-unreached-secrets");
-        await harness.useFixture("no-unreached-secrets__publish-job-isolated-from-pr-build");
-        const result = await run("Audit .github/workflows/release.yml. Are the secrets used here a security risk?");
+        await harness.useFixture("no-unreached-secrets__scheduled-internal-job");
+        const result = await run("Audit .github/workflows/nightly.yml — anything risky about how the secret is used?");
 
         await expect(result).toSatisfyJudge(DoesNotFlagUnreachedSecretsJudge);
-        await expect(result).toSatisfyJudge(ExplainsSecretsNotReachableJudge);
+        await expect(result).toSatisfyJudge(ExplainsSecretNotReachableJudge);
       },
     );
   },

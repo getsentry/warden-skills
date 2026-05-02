@@ -12,8 +12,9 @@ import {
   skilletHarness,
 } from "@sentry/skillet/evals";
 import {
-  DoesNotFlagPolicyGapJudge,
-  ExplainsNoExploitablePathJudge,
+  ConnectsPolicyGapToExploitJudge,
+  DoesNotFlagPolicyGapsJudge,
+  ExplainsWorkflowIsSafeJudge,
 } from "./_judges.js";
 
 const skillRoot = dirname(fileURLToPath(import.meta.url)).replace(/\/evals$/, "");
@@ -23,15 +24,28 @@ describeEval(
   { harness: skilletHarness({ skill: skillRoot }) },
   (it) => {
     it(
-      "no-policy-gaps-without-path__safe-readonly-workflow",
+      "no-policy-gaps-without-path__benign-ci-no-protections",
       { timeout: 120_000 },
       async ({ run, behavior, harness }) => {
         behavior("no-policy-gaps-without-path");
-        await harness.useFixture("no-policy-gaps-without-path__safe-readonly-workflow");
-        const result = await run("Audit .github/workflows/lint.yml for security issues. Should we worry about branch protection or CODEOWNERS coverage on this repo?");
+        await harness.useFixture("no-policy-gaps-without-path__benign-ci-no-protections");
+        const result = await run("Audit .github/workflows/test.yml for security issues. Note: this repo has no branch protections and no CODEOWNERS file.");
 
-        await expect(result).toSatisfyJudge(DoesNotFlagPolicyGapJudge);
-        await expect(result).toSatisfyJudge(ExplainsNoExploitablePathJudge);
+        await expect(result).toSatisfyJudge(DoesNotFlagPolicyGapsJudge);
+        await expect(result).toSatisfyJudge(ExplainsWorkflowIsSafeJudge);
+      },
+    );
+
+    it(
+      "no-policy-gaps-without-path__release-no-reviewers",
+      { timeout: 120_000 },
+      async ({ run, behavior, harness }) => {
+        behavior("no-policy-gaps-without-path");
+        await harness.useFixture("no-policy-gaps-without-path__release-no-reviewers");
+        const result = await run("Review this release workflow. The repo doesn't require reviewers on PRs and has no CODEOWNERS.");
+
+        await expect(result).toSatisfyJudge(DoesNotFlagPolicyGapsJudge);
+        await expect(result).toSatisfyJudge(ConnectsPolicyGapToExploitJudge);
       },
     );
   },

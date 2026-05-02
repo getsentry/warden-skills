@@ -14,6 +14,7 @@ import {
 import {
   ConnectsExploitChainJudge,
   IdentifiesPrivilegedTriggerJudge,
+  IncludesFileAndLineJudge,
   RatesHighSeverityJudge,
 } from "./_judges.js";
 
@@ -24,16 +25,17 @@ describeEval(
   { harness: skilletHarness({ skill: skillRoot }) },
   (it) => {
     it(
-      "report-pwn-request__pr-target-checkout-and-test",
+      "report-pwn-request__pr-target-checkout-build",
       { timeout: 180_000 },
       async ({ run, behavior, harness }) => {
         behavior("report-pwn-request");
-        await harness.useFixture("report-pwn-request__pr-target-checkout-and-test");
-        const result = await run("Please audit the workflows in .github/workflows/ for security vulnerabilities and report any findings.");
+        await harness.useFixture("report-pwn-request__pr-target-checkout-build");
+        const result = await run("Audit the workflows in .github/workflows/ for security vulnerabilities.");
 
         await expect(result).toSatisfyJudge(IdentifiesPrivilegedTriggerJudge);
         await expect(result).toSatisfyJudge(ConnectsExploitChainJudge);
         await expect(result).toSatisfyJudge(RatesHighSeverityJudge);
+        await expect(result).toSatisfyJudge(IncludesFileAndLineJudge);
       },
     );
 
@@ -43,11 +45,12 @@ describeEval(
       async ({ run, behavior, harness }) => {
         behavior("report-pwn-request");
         await harness.useFixture("report-pwn-request__workflow-run-artifact-execution");
-        const result = await run("Review .github/workflows/deploy.yml and tell me if there are any security problems.");
+        const result = await run("Please review .github/workflows/deploy.yml for any security issues.");
 
         await expect(result).toSatisfyJudge(IdentifiesPrivilegedTriggerJudge);
         await expect(result).toSatisfyJudge(ConnectsExploitChainJudge);
         await expect(result).toSatisfyJudge(RatesHighSeverityJudge);
+        await expect(result).toSatisfyJudge(IncludesFileAndLineJudge);
       },
     );
   },

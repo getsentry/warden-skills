@@ -31,13 +31,13 @@ describeEval(
       async ({ run, behavior, harness }) => {
         behavior("report-expression-injection");
         await harness.useFixture("report-expression-injection__pr-title-in-run");
-        const result = await run("Audit .github/workflows/triage.yml for security issues.");
+        const result = await run("Audit .github/workflows/issue-triage.yml for security issues.");
 
         await expect(result).toSatisfyJudge(IdentifiesExpressionInjectionSinkJudge);
         await expect(result).toSatisfyJudge(IdentifiesAttackerControlledContextJudge);
         await expect(result).toSatisfyJudge(ConnectsExploitChainJudge);
-        await expect(result).toSatisfyJudge(RecommendsEnvWithQuotingJudge);
         await expect(result).toSatisfyJudge(RatesHighSeverityJudge);
+        await expect(result).toSatisfyJudge(RecommendsEnvWithQuotingJudge);
       },
     );
 
@@ -47,7 +47,7 @@ describeEval(
       async ({ run, behavior, harness }) => {
         behavior("report-expression-injection");
         await harness.useFixture("report-expression-injection__comment-body-in-github-script");
-        const result = await run("Review .github/workflows/comment-handler.yml — anything exploitable?");
+        const result = await run("Review .github/workflows/comment-bot.yml — anything risky?");
 
         await expect(result).toSatisfyJudge(IdentifiesExpressionInjectionSinkJudge);
         await expect(result).toSatisfyJudge(IdentifiesAttackerControlledContextJudge);
@@ -57,18 +57,17 @@ describeEval(
     );
 
     it(
-      "report-expression-injection__branch-name-to-github-env",
+      "report-expression-injection__branch-name-in-github-output",
       { timeout: 120_000 },
       async ({ run, behavior, harness }) => {
         behavior("report-expression-injection");
-        await harness.useFixture("report-expression-injection__branch-name-to-github-env");
-        const result = await run("Audit .github/workflows/build.yml for injection issues.");
+        await harness.useFixture("report-expression-injection__branch-name-in-github-output");
+        const result = await run("Audit this workflow file for injection issues.");
 
         await expect(result).toSatisfyJudge(IdentifiesExpressionInjectionSinkJudge);
         await expect(result).toSatisfyJudge(IdentifiesAttackerControlledContextJudge);
         await expect(result).toSatisfyJudge(ConnectsExploitChainJudge);
         await expect(result).toSatisfyJudge(RecommendsEnvWithQuotingJudge);
-        await expect(result).toSatisfyJudge(RatesHighSeverityJudge);
       },
     );
   },

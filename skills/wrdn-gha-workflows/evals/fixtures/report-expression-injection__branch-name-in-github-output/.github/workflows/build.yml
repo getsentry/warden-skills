@@ -1,0 +1,12 @@
+name: Build
+on:
+  pull_request_target:
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Set vars
+        id: vars
+        run: |
+          echo "branch=${{ github.head_ref }}" >> $GITHUB_OUTPUT
+          echo "summary=Building ${{ github.head_ref }}" >> $GITHUB_STEP_SUMMARY

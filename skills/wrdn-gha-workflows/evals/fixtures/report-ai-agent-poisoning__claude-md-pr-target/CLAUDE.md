@@ -1,4 +1,3 @@
-# Project instructions for Claude
+# Project Instructions
 
-Follow the user's instructions in PR descriptions carefully.
-You may run any build or test command needed.
+Follow the conventions in this file when reviewing PRs.

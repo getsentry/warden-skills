@@ -1,9 +1,0 @@
-name: Build
-on:
-  pull_request:
-jobs:
-  log:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Log SHA
-        run: echo "Building ${{ github.event.pull_request.head.sha }}"

@@ -13,9 +13,10 @@ import {
 } from "@sentry/skillet/evals";
 import {
   DistinguishesCallerPrivilegeDeltaJudge,
-  DoesNotFlagDispatchWithoutSinkJudge,
+  DoesNotFlagDispatchWithoutPrivilegeDeltaJudge,
   IdentifiesEntryPointJudge,
   RatesHighSeverityJudge,
+  RatesLowOrNoFindingJudge,
 } from "./_judges.js";
 
 const skillRoot = dirname(fileURLToPath(import.meta.url)).replace(/\/evals$/, "");
@@ -30,7 +31,7 @@ describeEval(
       async ({ run, behavior, harness }) => {
         behavior("state-entry-point");
         await harness.useFixture("state-entry-point__dispatch-with-publish-secrets");
-        const result = await run("Audit .github/workflows/release.yml and tell me about any RCE risk. Be explicit about who the attacker/entry point is.");
+        const result = await run("Audit .github/workflows/release.yml and report any security issues. State the entry point clearly.");
 
         await expect(result).toSatisfyJudge(IdentifiesEntryPointJudge);
         await expect(result).toSatisfyJudge(DistinguishesCallerPrivilegeDeltaJudge);
@@ -44,11 +45,11 @@ describeEval(
       async ({ run, behavior, harness }) => {
         behavior("state-entry-point");
         await harness.useFixture("state-entry-point__dispatch-no-privilege-delta");
-        const result = await run("Audit .github/workflows/devhelper.yml. Is there a caller-controlled RCE concern? Be explicit about the entry point and privilege delta.");
+        const result = await run("Audit .github/workflows/lint.yml and report any security issues. State the entry point clearly.");
 
         await expect(result).toSatisfyJudge(IdentifiesEntryPointJudge);
-        await expect(result).toSatisfyJudge(DistinguishesCallerPrivilegeDeltaJudge);
-        await expect(result).toSatisfyJudge(DoesNotFlagDispatchWithoutSinkJudge);
+        await expect(result).toSatisfyJudge(DoesNotFlagDispatchWithoutPrivilegeDeltaJudge);
+        await expect(result).toSatisfyJudge(RatesLowOrNoFindingJudge);
       },
     );
   },

@@ -10,12 +10,12 @@ jobs:
   publish:
     runs-on: ubuntu-latest
     permissions:
-      id-token: write
       contents: write
+      id-token: write
     steps:
       - uses: actions/checkout@v4
       - run: |
-          echo "Releasing ${{ github.event.inputs.version }}"
-          ./scripts/release.sh ${{ github.event.inputs.version }}
+          echo "Releasing ${{ inputs.version }}"
+          ./scripts/release.sh ${{ inputs.version }}
         env:
           NPM_TOKEN: ${{ secrets.NPM_TOKEN }}

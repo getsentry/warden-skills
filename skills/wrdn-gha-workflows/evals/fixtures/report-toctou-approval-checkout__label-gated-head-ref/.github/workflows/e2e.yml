@@ -1,19 +1,16 @@
 name: e2e
 on:
   pull_request_target:
-    types: [labeled]
+    types: [labeled, synchronize]
 jobs:
   e2e:
-    if: github.event.label.name == 'safe-to-test'
+    if: contains(github.event.pull_request.labels.*.name, 'safe-to-test')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
           ref: ${{ github.event.pull_request.head.ref }}
           repository: ${{ github.event.pull_request.head.repo.full_name }}
-      - run: |
-          npm ci
-          npm run e2e
+      - run: ./scripts/e2e.sh
         env:
-          STRIPE_KEY: ${{ secrets.STRIPE_TEST_KEY }}
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          STAGING_TOKEN: ${{ secrets.STAGING_TOKEN }}

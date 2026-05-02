@@ -12,10 +12,8 @@ import {
   skilletHarness,
 } from "@sentry/skillet/evals";
 import {
-  DoesNotFlagOutOfScopeJudge,
-  DoesNotFlagSafeResolvedValueJudge,
-  DoesNotFlagUnreachedSecretsJudge,
-  DoesNotFlagYamlStyleJudge,
+  DoesNotFabricateSinkJudge,
+  DoesNotFlagNonIssueJudge,
   ExplainsOutOfScopeJudge,
 } from "./_judges.js";
 
@@ -31,37 +29,36 @@ describeEval(
       async ({ run, behavior, harness }) => {
         behavior("exclude-non-findings");
         await harness.useFixture("exclude-non-findings__metadata-only-pr-target");
-        const result = await run("Audit .github/workflows/labeler.yml for security vulnerabilities.");
+        const result = await run("Audit .github/workflows/labeler.yml for security issues.");
 
-        await expect(result).toSatisfyJudge(DoesNotFlagOutOfScopeJudge);
+        await expect(result).toSatisfyJudge(DoesNotFlagNonIssueJudge);
         await expect(result).toSatisfyJudge(ExplainsOutOfScopeJudge);
       },
     );
 
     it(
-      "exclude-non-findings__numeric-id-and-yaml-style",
+      "exclude-non-findings__numeric-id-in-if",
       { timeout: 120_000 },
       async ({ run, behavior, harness }) => {
         behavior("exclude-non-findings");
-        await harness.useFixture("exclude-non-findings__numeric-id-and-yaml-style");
-        const result = await run("Review .github/workflows/comment.yml — anything to worry about?");
+        await harness.useFixture("exclude-non-findings__numeric-id-in-if");
+        const result = await run("Is there an injection risk in this workflow's if: condition?");
 
-        await expect(result).toSatisfyJudge(DoesNotFlagSafeResolvedValueJudge);
-        await expect(result).toSatisfyJudge(DoesNotFlagYamlStyleJudge);
+        await expect(result).toSatisfyJudge(DoesNotFlagNonIssueJudge);
         await expect(result).toSatisfyJudge(ExplainsOutOfScopeJudge);
+        await expect(result).toSatisfyJudge(DoesNotFabricateSinkJudge);
       },
     );
 
     it(
-      "exclude-non-findings__secrets-in-isolated-job",
+      "exclude-non-findings__mutable-ref-no-secrets",
       { timeout: 120_000 },
       async ({ run, behavior, harness }) => {
         behavior("exclude-non-findings");
-        await harness.useFixture("exclude-non-findings__secrets-in-isolated-job");
-        const result = await run("Check .github/workflows/release.yml for security issues.");
+        await harness.useFixture("exclude-non-findings__mutable-ref-no-secrets");
+        const result = await run("Review .github/workflows/docs.yml for supply chain risks.");
 
-        await expect(result).toSatisfyJudge(DoesNotFlagUnreachedSecretsJudge);
-        await expect(result).toSatisfyJudge(DoesNotFlagOutOfScopeJudge);
+        await expect(result).toSatisfyJudge(DoesNotFlagNonIssueJudge);
         await expect(result).toSatisfyJudge(ExplainsOutOfScopeJudge);
       },
     );

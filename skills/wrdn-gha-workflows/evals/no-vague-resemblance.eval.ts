@@ -24,12 +24,12 @@ describeEval(
   { harness: skilletHarness({ skill: skillRoot }) },
   (it) => {
     it(
-      "no-vague-resemblance__looks-like-pwn-but-no-checkout",
+      "no-vague-resemblance__looks-like-pwn-but-isnt",
       { timeout: 120_000 },
       async ({ run, behavior, harness }) => {
         behavior("no-vague-resemblance");
-        await harness.useFixture("no-vague-resemblance__looks-like-pwn-but-no-checkout");
-        const result = await run("Audit .github/workflows/triage.yml for security issues. Is there a pwn-request or injection vulnerability here?");
+        await harness.useFixture("no-vague-resemblance__looks-like-pwn-but-isnt");
+        const result = await run("Audit .github/workflows/triage.yml for security issues. Only report findings where you can trace a concrete exploit chain.");
 
         await expect(result).toSatisfyJudge(DoesNotFlagVagueResemblanceJudge);
         await expect(result).toSatisfyJudge(ExplainsMissingChainJudge);

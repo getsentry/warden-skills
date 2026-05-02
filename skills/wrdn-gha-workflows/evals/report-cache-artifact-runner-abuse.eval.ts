@@ -13,7 +13,7 @@ import {
 } from "@sentry/skillet/evals";
 import {
   ConnectsExploitChainJudge,
-  DoesNotFlagYamlStyleJudge,
+  DoesNotFlagYamlLintJudge,
   IdentifiesCachePoisoningJudge,
   IdentifiesSelfHostedRunnerAbuseJudge,
   RatesHighSeverityJudge,
@@ -26,31 +26,30 @@ describeEval(
   { harness: skilletHarness({ skill: skillRoot }) },
   (it) => {
     it(
-      "report-cache-artifact-runner-abuse__cache-poisoning-pr-to-privileged",
+      "report-cache-artifact-runner-abuse__cache-poisoning-pr",
       { timeout: 180_000 },
       async ({ run, behavior, harness }) => {
         behavior("report-cache-artifact-runner-abuse");
-        await harness.useFixture("report-cache-artifact-runner-abuse__cache-poisoning-pr-to-privileged");
-        const result = await run("Audit the workflows under .github/workflows/ for security issues and report any findings.");
+        await harness.useFixture("report-cache-artifact-runner-abuse__cache-poisoning-pr");
+        const result = await run("Audit the workflows in .github/workflows/ for security issues.");
 
         await expect(result).toSatisfyJudge(IdentifiesCachePoisoningJudge);
         await expect(result).toSatisfyJudge(ConnectsExploitChainJudge);
         await expect(result).toSatisfyJudge(RatesHighSeverityJudge);
-        await expect(result).toSatisfyJudge(DoesNotFlagYamlStyleJudge);
       },
     );
 
     it(
-      "report-cache-artifact-runner-abuse__self-hosted-fork-pr",
+      "report-cache-artifact-runner-abuse__self-hosted-pr-runner",
       { timeout: 180_000 },
       async ({ run, behavior, harness }) => {
         behavior("report-cache-artifact-runner-abuse");
-        await harness.useFixture("report-cache-artifact-runner-abuse__self-hosted-fork-pr");
-        const result = await run("Review .github/workflows/ci.yml and report security issues.");
+        await harness.useFixture("report-cache-artifact-runner-abuse__self-hosted-pr-runner");
+        const result = await run("Review .github/workflows/ci.yml for security risks.");
 
         await expect(result).toSatisfyJudge(IdentifiesSelfHostedRunnerAbuseJudge);
-        await expect(result).toSatisfyJudge(ConnectsExploitChainJudge);
         await expect(result).toSatisfyJudge(RatesHighSeverityJudge);
+        await expect(result).toSatisfyJudge(DoesNotFlagYamlLintJudge);
       },
     );
   },

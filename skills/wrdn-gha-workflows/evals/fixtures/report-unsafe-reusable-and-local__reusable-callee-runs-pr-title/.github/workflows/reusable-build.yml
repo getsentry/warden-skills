@@ -1,0 +1,18 @@
+name: Reusable Build
+on:
+  workflow_call:
+    inputs:
+      pr_title:
+        required: true
+        type: string
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Greet
+        run: echo "Building PR: ${{ inputs.pr_title }}"
+      - name: Publish
+        run: npm publish
+        env:
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}

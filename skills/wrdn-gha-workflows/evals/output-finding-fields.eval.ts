@@ -13,9 +13,9 @@ import {
 } from "@sentry/skillet/evals";
 import {
   IncludesConcreteFixPatchJudge,
-  IncludesConfidenceJudge,
   IncludesFileAndLineJudge,
-  IncludesTriggerInputAndImpactJudge,
+  IncludesImpactAndConfidenceJudge,
+  IncludesTriggerInputAndExecutionJudge,
   StatesNoFindingsAndListsReviewedJudge,
 } from "./_judges.js";
 
@@ -27,26 +27,26 @@ describeEval(
   (it) => {
     it(
       "output-finding-fields__pwn-request-full-fields",
-      { timeout: 180_000 },
+      { timeout: 120_000 },
       async ({ run, behavior, harness }) => {
         behavior("output-finding-fields");
         await harness.useFixture("output-finding-fields__pwn-request-full-fields");
-        const result = await run("Audit the workflows under .github/workflows/ for security issues and report any findings.");
+        const result = await run("Audit .github/workflows/ci.yml and report any security findings with full details.");
 
         await expect(result).toSatisfyJudge(IncludesFileAndLineJudge);
-        await expect(result).toSatisfyJudge(IncludesTriggerInputAndImpactJudge);
-        await expect(result).toSatisfyJudge(IncludesConfidenceJudge);
+        await expect(result).toSatisfyJudge(IncludesTriggerInputAndExecutionJudge);
+        await expect(result).toSatisfyJudge(IncludesImpactAndConfidenceJudge);
         await expect(result).toSatisfyJudge(IncludesConcreteFixPatchJudge);
       },
     );
 
     it(
       "output-finding-fields__no-findings-lists-reviewed",
-      { timeout: 180_000 },
+      { timeout: 120_000 },
       async ({ run, behavior, harness }) => {
         behavior("output-finding-fields");
         await harness.useFixture("output-finding-fields__no-findings-lists-reviewed");
-        const result = await run("Please audit the workflows in .github/workflows/ for security issues and tell me what you find.");
+        const result = await run("Review the workflows in .github/workflows/ for security issues.");
 
         await expect(result).toSatisfyJudge(StatesNoFindingsAndListsReviewedJudge);
       },

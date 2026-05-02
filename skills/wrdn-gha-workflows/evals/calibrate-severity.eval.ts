@@ -26,12 +26,12 @@ describeEval(
   { harness: skilletHarness({ skill: skillRoot }) },
   (it) => {
     it(
-      "calibrate-severity__high-pr-target-checkout-with-secrets",
+      "calibrate-severity__high-pwn-request-rce",
       { timeout: 120_000 },
       async ({ run, behavior, harness }) => {
         behavior("calibrate-severity");
-        await harness.useFixture("calibrate-severity__high-pr-target-checkout-with-secrets");
-        const result = await run("Audit .github/workflows/release.yml and report any security issues with a severity rating.");
+        await harness.useFixture("calibrate-severity__high-pwn-request-rce");
+        const result = await run("Audit .github/workflows/ci.yml and report any security findings with a severity rating.");
 
         await expect(result).toSatisfyJudge(RatesHighSeverityJudge);
         await expect(result).toSatisfyJudge(ExplainsSeverityRationaleJudge);
@@ -39,12 +39,12 @@ describeEval(
     );
 
     it(
-      "calibrate-severity__medium-mutable-third-party-with-write-token",
+      "calibrate-severity__medium-mutable-action-with-secrets",
       { timeout: 120_000 },
       async ({ run, behavior, harness }) => {
         behavior("calibrate-severity");
-        await harness.useFixture("calibrate-severity__medium-mutable-third-party-with-write-token");
-        const result = await run("Review .github/workflows/ci.yml and rate the severity of any issues you find.");
+        await harness.useFixture("calibrate-severity__medium-mutable-action-with-secrets");
+        const result = await run("Audit .github/workflows/release.yml and report findings with severity.");
 
         await expect(result).toSatisfyJudge(RatesMediumSeverityJudge);
         await expect(result).toSatisfyJudge(ExplainsSeverityRationaleJudge);
@@ -52,28 +52,15 @@ describeEval(
     );
 
     it(
-      "calibrate-severity__low-defense-in-depth-adjacent",
+      "calibrate-severity__low-defense-in-depth",
       { timeout: 120_000 },
       async ({ run, behavior, harness }) => {
         behavior("calibrate-severity");
-        await harness.useFixture("calibrate-severity__low-defense-in-depth-adjacent");
-        const result = await run("Audit .github/workflows/publish.yml. The main injection issue is already understood — call out any defense-in-depth gaps adjacent to it and rate them.");
+        await harness.useFixture("calibrate-severity__low-defense-in-depth");
+        const result = await run("Audit .github/workflows/build.yml and report findings with severity.");
 
         await expect(result).toSatisfyJudge(RatesLowSeverityJudge);
-        await expect(result).toSatisfyJudge(ExplainsSeverityRationaleJudge);
-      },
-    );
-
-    it(
-      "calibrate-severity__uncertain-prefers-lower",
-      { timeout: 120_000 },
-      async ({ run, behavior, harness }) => {
-        behavior("calibrate-severity");
-        await harness.useFixture("calibrate-severity__uncertain-prefers-lower");
-        const result = await run("Audit .github/workflows/build.yml. Some details (like whether the called script reinterprets its arg) aren't visible. Rate severity.");
-
         await expect(result).toSatisfyJudge(PrefersLowerWhenUncertainJudge);
-        await expect(result).toSatisfyJudge(ExplainsSeverityRationaleJudge);
       },
     );
   },

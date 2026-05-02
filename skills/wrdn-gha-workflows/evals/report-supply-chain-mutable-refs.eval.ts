@@ -14,9 +14,9 @@ import {
 import {
   ConnectsPrivilegedContextJudge,
   DoesNotFlagFirstPartyActionsJudge,
-  DoesNotFlagMutableRefJudge,
+  DoesNotFlagPublicReadOnlyMutableRefJudge,
   IdentifiesMutableThirdPartyRefJudge,
-  RecommendsPinToShaJudge,
+  RecommendsCommitShaPinningJudge,
 } from "./_judges.js";
 
 const skillRoot = dirname(fileURLToPath(import.meta.url)).replace(/\/evals$/, "");
@@ -26,29 +26,29 @@ describeEval(
   { harness: skilletHarness({ skill: skillRoot }) },
   (it) => {
     it(
-      "report-supply-chain-mutable-refs__publish-job-tag-ref",
-      { timeout: 180_000 },
+      "report-supply-chain-mutable-refs__release-publish-tag",
+      { timeout: 120_000 },
       async ({ run, behavior, harness }) => {
         behavior("report-supply-chain-mutable-refs");
-        await harness.useFixture("report-supply-chain-mutable-refs__publish-job-tag-ref");
+        await harness.useFixture("report-supply-chain-mutable-refs__release-publish-tag");
         const result = await run("Audit .github/workflows/release.yml for security issues.");
 
         await expect(result).toSatisfyJudge(IdentifiesMutableThirdPartyRefJudge);
         await expect(result).toSatisfyJudge(ConnectsPrivilegedContextJudge);
-        await expect(result).toSatisfyJudge(RecommendsPinToShaJudge);
+        await expect(result).toSatisfyJudge(RecommendsCommitShaPinningJudge);
         await expect(result).toSatisfyJudge(DoesNotFlagFirstPartyActionsJudge);
       },
     );
 
     it(
-      "report-supply-chain-mutable-refs__public-readonly-no-flag",
+      "report-supply-chain-mutable-refs__public-readonly-not-flagged",
       { timeout: 120_000 },
       async ({ run, behavior, harness }) => {
         behavior("report-supply-chain-mutable-refs");
-        await harness.useFixture("report-supply-chain-mutable-refs__public-readonly-no-flag");
-        const result = await run("Audit .github/workflows/lint.yml for supply-chain risks.");
+        await harness.useFixture("report-supply-chain-mutable-refs__public-readonly-not-flagged");
+        const result = await run("Audit .github/workflows/lint.yml for security issues.");
 
-        await expect(result).toSatisfyJudge(DoesNotFlagMutableRefJudge);
+        await expect(result).toSatisfyJudge(DoesNotFlagPublicReadOnlyMutableRefJudge);
         await expect(result).toSatisfyJudge(DoesNotFlagFirstPartyActionsJudge);
       },
     );

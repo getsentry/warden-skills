@@ -12,10 +12,11 @@ import {
   skilletHarness,
 } from "@sentry/skillet/evals";
 import {
+  ConnectsExploitChainJudge,
   IdentifiesPrivilegedTriggerJudge,
   IdentifiesTOCTOUJudge,
   RatesHighSeverityJudge,
-  RecommendsPinApprovedSHAJudge,
+  RecommendsSHAPinFromApprovalJudge,
 } from "./_judges.js";
 
 const skillRoot = dirname(fileURLToPath(import.meta.url)).replace(/\/evals$/, "");
@@ -34,7 +35,8 @@ describeEval(
 
         await expect(result).toSatisfyJudge(IdentifiesTOCTOUJudge);
         await expect(result).toSatisfyJudge(IdentifiesPrivilegedTriggerJudge);
-        await expect(result).toSatisfyJudge(RecommendsPinApprovedSHAJudge);
+        await expect(result).toSatisfyJudge(ConnectsExploitChainJudge);
+        await expect(result).toSatisfyJudge(RecommendsSHAPinFromApprovalJudge);
         await expect(result).toSatisfyJudge(RatesHighSeverityJudge);
       },
     );
@@ -45,11 +47,12 @@ describeEval(
       async ({ run, behavior, harness }) => {
         behavior("report-toctou-approval-checkout");
         await harness.useFixture("report-toctou-approval-checkout__label-gated-head-ref");
-        const result = await run("Review .github/workflows/e2e.yml — is the label gate sufficient here?");
+        const result = await run("Review .github/workflows/e2e.yml — is the label gate sufficient?");
 
         await expect(result).toSatisfyJudge(IdentifiesTOCTOUJudge);
         await expect(result).toSatisfyJudge(IdentifiesPrivilegedTriggerJudge);
-        await expect(result).toSatisfyJudge(RecommendsPinApprovedSHAJudge);
+        await expect(result).toSatisfyJudge(ConnectsExploitChainJudge);
+        await expect(result).toSatisfyJudge(RecommendsSHAPinFromApprovalJudge);
         await expect(result).toSatisfyJudge(RatesHighSeverityJudge);
       },
     );

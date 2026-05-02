@@ -13,10 +13,10 @@ import {
 } from "@sentry/skillet/evals";
 import {
   ConnectsExploitChainJudge,
+  IdentifiesChatopsTriggerJudge,
   IdentifiesCommentInjectionSinkJudge,
-  IdentifiesPrivilegedTriggerJudge,
+  IdentifiesMissingAuthGateJudge,
   RatesHighSeverityJudge,
-  RecommendsAuthorizationGateJudge,
 } from "./_judges.js";
 
 const skillRoot = dirname(fileURLToPath(import.meta.url)).replace(/\/evals$/, "");
@@ -31,13 +31,13 @@ describeEval(
       async ({ run, behavior, harness }) => {
         behavior("report-comment-chatops");
         await harness.useFixture("report-comment-chatops__issue-comment-shell-injection");
-        const result = await run("Audit .github/workflows/chatops.yml for security issues.");
+        const result = await run("Please audit .github/workflows/chatops.yml and report any security issues.");
 
-        await expect(result).toSatisfyJudge(IdentifiesPrivilegedTriggerJudge);
+        await expect(result).toSatisfyJudge(IdentifiesChatopsTriggerJudge);
+        await expect(result).toSatisfyJudge(IdentifiesMissingAuthGateJudge);
         await expect(result).toSatisfyJudge(IdentifiesCommentInjectionSinkJudge);
         await expect(result).toSatisfyJudge(ConnectsExploitChainJudge);
         await expect(result).toSatisfyJudge(RatesHighSeverityJudge);
-        await expect(result).toSatisfyJudge(RecommendsAuthorizationGateJudge);
       },
     );
 
@@ -47,9 +47,9 @@ describeEval(
       async ({ run, behavior, harness }) => {
         behavior("report-comment-chatops");
         await harness.useFixture("report-comment-chatops__discussion-title-injection");
-        const result = await run("Review .github/workflows/discussion.yml — anything risky?");
+        const result = await run("Review .github/workflows/discussion.yml for security problems.");
 
-        await expect(result).toSatisfyJudge(IdentifiesPrivilegedTriggerJudge);
+        await expect(result).toSatisfyJudge(IdentifiesChatopsTriggerJudge);
         await expect(result).toSatisfyJudge(IdentifiesCommentInjectionSinkJudge);
         await expect(result).toSatisfyJudge(ConnectsExploitChainJudge);
         await expect(result).toSatisfyJudge(RatesHighSeverityJudge);

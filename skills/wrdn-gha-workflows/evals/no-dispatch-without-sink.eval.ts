@@ -12,7 +12,7 @@ import {
   skilletHarness,
 } from "@sentry/skillet/evals";
 import {
-  DoesNotFabricateEvidenceJudge,
+  DoesNotFabricateSinkJudge,
   DoesNotFlagDispatchWithoutSinkJudge,
   ExplainsNoExploitablePathJudge,
 } from "./_judges.js";
@@ -24,29 +24,29 @@ describeEval(
   { harness: skilletHarness({ skill: skillRoot }) },
   (it) => {
     it(
-      "no-dispatch-without-sink__manual-deploy-no-inputs",
+      "no-dispatch-without-sink__dispatch-echo-choice",
       { timeout: 120_000 },
       async ({ run, behavior, harness }) => {
         behavior("no-dispatch-without-sink");
-        await harness.useFixture("no-dispatch-without-sink__manual-deploy-no-inputs");
-        const result = await run("Audit .github/workflows/deploy.yml for security issues.");
+        await harness.useFixture("no-dispatch-without-sink__dispatch-echo-choice");
+        const result = await run("Please audit .github/workflows/release.yml for security issues.");
 
         await expect(result).toSatisfyJudge(DoesNotFlagDispatchWithoutSinkJudge);
         await expect(result).toSatisfyJudge(ExplainsNoExploitablePathJudge);
-        await expect(result).toSatisfyJudge(DoesNotFabricateEvidenceJudge);
+        await expect(result).toSatisfyJudge(DoesNotFabricateSinkJudge);
       },
     );
 
     it(
-      "no-dispatch-without-sink__nightly-schedule-no-sink",
+      "no-dispatch-without-sink__schedule-public-fetch",
       { timeout: 120_000 },
       async ({ run, behavior, harness }) => {
         behavior("no-dispatch-without-sink");
-        await harness.useFixture("no-dispatch-without-sink__nightly-schedule-no-sink");
-        const result = await run("Is there anything risky in this scheduled workflow?");
+        await harness.useFixture("no-dispatch-without-sink__schedule-public-fetch");
+        const result = await run("Any security risks in this scheduled workflow? See .github/workflows/nightly.yml");
 
         await expect(result).toSatisfyJudge(DoesNotFlagDispatchWithoutSinkJudge);
-        await expect(result).toSatisfyJudge(DoesNotFabricateEvidenceJudge);
+        await expect(result).toSatisfyJudge(ExplainsNoExploitablePathJudge);
       },
     );
   },

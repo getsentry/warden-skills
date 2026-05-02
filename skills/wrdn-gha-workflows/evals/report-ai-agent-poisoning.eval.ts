@@ -13,7 +13,7 @@ import {
 } from "@sentry/skillet/evals";
 import {
   ConnectsExploitChainJudge,
-  IdentifiesAgentPoisoningJudge,
+  IdentifiesAIAgentPoisoningJudge,
   IdentifiesPrivilegedTriggerJudge,
   RatesHighSeverityJudge,
 } from "./_judges.js";
@@ -32,7 +32,7 @@ describeEval(
         await harness.useFixture("report-ai-agent-poisoning__claude-md-pr-target");
         const result = await run("Audit .github/workflows/claude-review.yml for security issues.");
 
-        await expect(result).toSatisfyJudge(IdentifiesAgentPoisoningJudge);
+        await expect(result).toSatisfyJudge(IdentifiesAIAgentPoisoningJudge);
         await expect(result).toSatisfyJudge(IdentifiesPrivilegedTriggerJudge);
         await expect(result).toSatisfyJudge(ConnectsExploitChainJudge);
         await expect(result).toSatisfyJudge(RatesHighSeverityJudge);
@@ -40,14 +40,14 @@ describeEval(
     );
 
     it(
-      "report-ai-agent-poisoning__comment-trigger-agents-md",
+      "report-ai-agent-poisoning__issue-comment-agent",
       { timeout: 180_000 },
       async ({ run, behavior, harness }) => {
         behavior("report-ai-agent-poisoning");
-        await harness.useFixture("report-ai-agent-poisoning__comment-trigger-agents-md");
-        const result = await run("Review .github/workflows/agent.yml — anything dangerous about how it invokes the coding agent?");
+        await harness.useFixture("report-ai-agent-poisoning__issue-comment-agent");
+        const result = await run("Review .github/workflows/agent.yml — anything risky?");
 
-        await expect(result).toSatisfyJudge(IdentifiesAgentPoisoningJudge);
+        await expect(result).toSatisfyJudge(IdentifiesAIAgentPoisoningJudge);
         await expect(result).toSatisfyJudge(IdentifiesPrivilegedTriggerJudge);
         await expect(result).toSatisfyJudge(ConnectsExploitChainJudge);
         await expect(result).toSatisfyJudge(RatesHighSeverityJudge);

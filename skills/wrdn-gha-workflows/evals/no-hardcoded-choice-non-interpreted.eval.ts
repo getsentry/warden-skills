@@ -12,8 +12,8 @@ import {
   skilletHarness,
 } from "@sentry/skillet/evals";
 import {
-  DoesNotFlagSafeChoiceInputJudge,
-  ExplainsSafeChoiceInputJudge,
+  DoesNotFlagHardcodedChoiceJudge,
+  ExplainsTypeConstrainsValuesJudge,
 } from "./_judges.js";
 
 const skillRoot = dirname(fileURLToPath(import.meta.url)).replace(/\/evals$/, "");
@@ -23,15 +23,15 @@ describeEval(
   { harness: skilletHarness({ skill: skillRoot }) },
   (it) => {
     it(
-      "no-hardcoded-choice-non-interpreted__choice-in-if-and-with",
+      "no-hardcoded-choice-non-interpreted__choice-in-if",
       { timeout: 120_000 },
       async ({ run, behavior, harness }) => {
         behavior("no-hardcoded-choice-non-interpreted");
-        await harness.useFixture("no-hardcoded-choice-non-interpreted__choice-in-if-and-with");
-        const result = await run("Audit .github/workflows/deploy.yml for security issues. Are the manual inputs safe?");
+        await harness.useFixture("no-hardcoded-choice-non-interpreted__choice-in-if");
+        const result = await run("Audit .github/workflows/deploy.yml — is there an injection risk from the environment input?");
 
-        await expect(result).toSatisfyJudge(DoesNotFlagSafeChoiceInputJudge);
-        await expect(result).toSatisfyJudge(ExplainsSafeChoiceInputJudge);
+        await expect(result).toSatisfyJudge(DoesNotFlagHardcodedChoiceJudge);
+        await expect(result).toSatisfyJudge(ExplainsTypeConstrainsValuesJudge);
       },
     );
   },

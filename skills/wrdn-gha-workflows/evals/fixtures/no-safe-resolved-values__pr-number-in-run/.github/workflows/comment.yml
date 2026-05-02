@@ -6,5 +6,4 @@ jobs:
   greet:
     runs-on: ubuntu-latest
     steps:
-      - name: Echo PR number
-        run: echo "PR #${{ github.event.pull_request.number }} opened"
+      - run: echo "Hello PR #${{ github.event.pull_request.number }}"

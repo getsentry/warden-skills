@@ -12,11 +12,9 @@ import {
   skilletHarness,
 } from "@sentry/skillet/evals";
 import {
-  DistinguishesApprovalFromSHAPinJudge,
-  DistinguishesMaskingScopeJudge,
-  DistinguishesPullRequestTargetCheckoutJudge,
-  DoesNotFlagSafeTrapJudge,
-  ExplainsPersistCredentialsScopeJudge,
+  DistinguishesPrivilegedTriggerJudge,
+  DoesNotFlagSafeWorkflowJudge,
+  ExplainsFalsePositiveTrapJudge,
 } from "./_judges.js";
 
 const skillRoot = dirname(fileURLToPath(import.meta.url)).replace(/\/evals$/, "");
@@ -26,51 +24,29 @@ describeEval(
   { harness: skilletHarness({ skill: skillRoot }) },
   (it) => {
     it(
-      "apply-false-positive-controls__pr-target-default-checkout",
+      "apply-false-positive-controls__default-checkout-pr-target",
       { timeout: 120_000 },
       async ({ run, behavior, harness }) => {
         behavior("apply-false-positive-controls");
-        await harness.useFixture("apply-false-positive-controls__pr-target-default-checkout");
-        const result = await run("Audit .github/workflows/label.yml. Is the pull_request_target trigger here a pwn-request vulnerability?");
+        await harness.useFixture("apply-false-positive-controls__default-checkout-pr-target");
+        const result = await run("Audit .github/workflows/label.yml for security issues. Is this a pwn-request vulnerability?");
 
-        await expect(result).toSatisfyJudge(DistinguishesPullRequestTargetCheckoutJudge);
-        await expect(result).toSatisfyJudge(DoesNotFlagSafeTrapJudge);
+        await expect(result).toSatisfyJudge(DistinguishesPrivilegedTriggerJudge);
+        await expect(result).toSatisfyJudge(DoesNotFlagSafeWorkflowJudge);
+        await expect(result).toSatisfyJudge(ExplainsFalsePositiveTrapJudge);
       },
     );
 
     it(
-      "apply-false-positive-controls__persist-credentials-false-other-secrets",
+      "apply-false-positive-controls__hardcoded-choice-input",
       { timeout: 120_000 },
       async ({ run, behavior, harness }) => {
         behavior("apply-false-positive-controls");
-        await harness.useFixture("apply-false-positive-controls__persist-credentials-false-other-secrets");
-        const result = await run("Someone said this workflow is safe because persist-credentials is false. Is that right?");
+        await harness.useFixture("apply-false-positive-controls__hardcoded-choice-input");
+        const result = await run("Review this workflow. Does the choice input create an RCE?");
 
-        await expect(result).toSatisfyJudge(ExplainsPersistCredentialsScopeJudge);
-      },
-    );
-
-    it(
-      "apply-false-positive-controls__approval-is-not-sha-pin",
-      { timeout: 120_000 },
-      async ({ run, behavior, harness }) => {
-        behavior("apply-false-positive-controls");
-        await harness.useFixture("apply-false-positive-controls__approval-is-not-sha-pin");
-        const result = await run("We require maintainer approval before workflows run on PRs. Does that make using third-party@v1 tag refs safe?");
-
-        await expect(result).toSatisfyJudge(DistinguishesApprovalFromSHAPinJudge);
-      },
-    );
-
-    it(
-      "apply-false-positive-controls__masking-not-transformations",
-      { timeout: 120_000 },
-      async ({ run, behavior, harness }) => {
-        behavior("apply-false-positive-controls");
-        await harness.useFixture("apply-false-positive-controls__masking-not-transformations");
-        const result = await run("GitHub masks secrets in logs, so this base64-encoding step is fine, right?");
-
-        await expect(result).toSatisfyJudge(DistinguishesMaskingScopeJudge);
+        await expect(result).toSatisfyJudge(DoesNotFlagSafeWorkflowJudge);
+        await expect(result).toSatisfyJudge(ExplainsFalsePositiveTrapJudge);
       },
     );
   },

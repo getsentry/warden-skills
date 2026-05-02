@@ -13,9 +13,9 @@ import {
 } from "@sentry/skillet/evals";
 import {
   ConnectsExploitChainJudge,
-  FollowsReusableCalleeJudge,
+  FollowsReusableWorkflowJudge,
   IdentifiesPrivilegedTriggerJudge,
-  IncludesFileAndLineEvidenceJudge,
+  IdentifiesTrustBoundaryJudge,
   RatesHighSeverityJudge,
 } from "./_judges.js";
 
@@ -26,18 +26,18 @@ describeEval(
   { harness: skilletHarness({ skill: skillRoot }) },
   (it) => {
     it(
-      "trace-execution-graph__pr-target-into-composite-action",
+      "trace-execution-graph__reusable-callee-chain",
       { timeout: 180_000 },
       async ({ run, behavior, harness }) => {
         behavior("trace-execution-graph");
-        await harness.useFixture("trace-execution-graph__pr-target-into-composite-action");
-        const result = await run("Audit this repository's GitHub Actions for security issues. Trace the full execution path before reporting.");
+        await harness.useFixture("trace-execution-graph__reusable-callee-chain");
+        const result = await run("Audit the workflows in .github/workflows/ for security issues. Trace the full execution graph across files before reporting.");
 
         await expect(result).toSatisfyJudge(IdentifiesPrivilegedTriggerJudge);
-        await expect(result).toSatisfyJudge(FollowsReusableCalleeJudge);
+        await expect(result).toSatisfyJudge(FollowsReusableWorkflowJudge);
+        await expect(result).toSatisfyJudge(IdentifiesTrustBoundaryJudge);
         await expect(result).toSatisfyJudge(ConnectsExploitChainJudge);
         await expect(result).toSatisfyJudge(RatesHighSeverityJudge);
-        await expect(result).toSatisfyJudge(IncludesFileAndLineEvidenceJudge);
       },
     );
   },

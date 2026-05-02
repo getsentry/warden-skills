@@ -13,7 +13,7 @@ import {
 } from "@sentry/skillet/evals";
 import {
   DoesNotFlagFirstPartyActionsJudge,
-  DoesNotFlagMutableRefJudge,
+  DoesNotFlagPublicReadOnlyMutableRefJudge,
   ExplainsNoExploitablePathJudge,
 } from "./_judges.js";
 
@@ -29,9 +29,9 @@ describeEval(
       async ({ run, behavior, harness }) => {
         behavior("no-public-only-mutable-refs");
         await harness.useFixture("no-public-only-mutable-refs__public-readonly-third-party");
-        const result = await run("Audit .github/workflows/lint.yml for security issues.");
+        const result = await run("Please audit .github/workflows/lint.yml for security issues.");
 
-        await expect(result).toSatisfyJudge(DoesNotFlagMutableRefJudge);
+        await expect(result).toSatisfyJudge(DoesNotFlagPublicReadOnlyMutableRefJudge);
         await expect(result).toSatisfyJudge(DoesNotFlagFirstPartyActionsJudge);
         await expect(result).toSatisfyJudge(ExplainsNoExploitablePathJudge);
       },

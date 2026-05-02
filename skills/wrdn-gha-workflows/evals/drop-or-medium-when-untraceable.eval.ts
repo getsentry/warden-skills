@@ -12,8 +12,8 @@ import {
   skilletHarness,
 } from "@sentry/skillet/evals";
 import {
-  DoesNotFabricateEvidenceJudge,
-  DropsOrRatesMediumJudge,
+  DoesNotFabricateChainJudge,
+  DropsOrDowngradesUntraceableJudge,
   IdentifiesMissingLinkJudge,
 } from "./_judges.js";
 
@@ -24,16 +24,16 @@ describeEval(
   { harness: skilletHarness({ skill: skillRoot }) },
   (it) => {
     it(
-      "drop-or-medium-when-untraceable__missing-called-workflow",
-      { timeout: 180_000 },
+      "drop-or-medium-when-untraceable__missing-composite-action",
+      { timeout: 120_000 },
       async ({ run, behavior, harness }) => {
         behavior("drop-or-medium-when-untraceable");
-        await harness.useFixture("drop-or-medium-when-untraceable__missing-called-workflow");
-        const result = await run("Audit .github/workflows/ci.yml for security issues.");
+        await harness.useFixture("drop-or-medium-when-untraceable__missing-composite-action");
+        const result = await run("Audit .github/workflows/ci.yml for security issues. Report any vulnerabilities you find.");
 
-        await expect(result).toSatisfyJudge(DropsOrRatesMediumJudge);
+        await expect(result).toSatisfyJudge(DropsOrDowngradesUntraceableJudge);
         await expect(result).toSatisfyJudge(IdentifiesMissingLinkJudge);
-        await expect(result).toSatisfyJudge(DoesNotFabricateEvidenceJudge);
+        await expect(result).toSatisfyJudge(DoesNotFabricateChainJudge);
       },
     );
   },

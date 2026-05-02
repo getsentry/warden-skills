@@ -1,0 +1,30 @@
+name: Build and Test (reusable)
+on:
+  workflow_call:
+    inputs:
+      pr_ref:
+        required: true
+        type: string
+      pr_title:
+        required: true
+        type: string
+    secrets:
+      NPM_TOKEN:
+        required: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.pr_ref }}
+      - name: Setup
+        run: echo "Building PR ${{ inputs.pr_title }}"
+      - name: Install and test
+        run: |
+          npm ci
+          npm run build
+          npm test
+        env:
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}

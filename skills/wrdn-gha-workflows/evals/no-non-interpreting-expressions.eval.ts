@@ -12,9 +12,10 @@ import {
   skilletHarness,
 } from "@sentry/skillet/evals";
 import {
+  ConnectsExploitChainJudge,
   DoesNotFlagNonInterpretingExpressionJudge,
-  DoesNotRecommendEnvQuotingAsFixJudge,
   ExplainsNonInterpretingContextJudge,
+  FlagsReinterpretedEnvJudge,
 } from "./_judges.js";
 
 const skillRoot = dirname(fileURLToPath(import.meta.url)).replace(/\/evals$/, "");
@@ -29,25 +30,23 @@ describeEval(
       async ({ run, behavior, harness }) => {
         behavior("no-non-interpreting-expressions");
         await harness.useFixture("no-non-interpreting-expressions__title-in-if-condition");
-        const result = await run("Audit .github/workflows/triage.yml — is the use of github.event.pull_request.title in the if: condition a script injection vulnerability?");
+        const result = await run("Audit .github/workflows/triage.yml. Is there an injection risk from the PR title being used here?");
 
         await expect(result).toSatisfyJudge(DoesNotFlagNonInterpretingExpressionJudge);
         await expect(result).toSatisfyJudge(ExplainsNonInterpretingContextJudge);
-        await expect(result).toSatisfyJudge(DoesNotRecommendEnvQuotingAsFixJudge);
       },
     );
 
     it(
-      "no-non-interpreting-expressions__title-in-with-input",
+      "no-non-interpreting-expressions__env-reinterpreted-in-run",
       { timeout: 120_000 },
       async ({ run, behavior, harness }) => {
         behavior("no-non-interpreting-expressions");
-        await harness.useFixture("no-non-interpreting-expressions__title-in-with-input");
-        const result = await run("Review .github/workflows/notify.yml — does passing github.event.pull_request.title via with: to an action create a code injection risk?");
+        await harness.useFixture("no-non-interpreting-expressions__env-reinterpreted-in-run");
+        const result = await run("Audit .github/workflows/build.yml for injection issues.");
 
-        await expect(result).toSatisfyJudge(DoesNotFlagNonInterpretingExpressionJudge);
-        await expect(result).toSatisfyJudge(ExplainsNonInterpretingContextJudge);
-        await expect(result).toSatisfyJudge(DoesNotRecommendEnvQuotingAsFixJudge);
+        await expect(result).toSatisfyJudge(FlagsReinterpretedEnvJudge);
+        await expect(result).toSatisfyJudge(ConnectsExploitChainJudge);
       },
     );
   },

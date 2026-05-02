@@ -1,0 +1,19 @@
+name: Manual Release
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Target environment'
+        required: true
+        type: choice
+        options:
+          - staging
+          - production
+jobs:
+  announce:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Print target
+        env:
+          TARGET: ${{ inputs.environment }}
+        run: echo "Deploying to $TARGET"

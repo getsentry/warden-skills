@@ -15,7 +15,7 @@ import {
   ConnectsExploitChainJudge,
   IdentifiesCredentialExposureJudge,
   RatesHighSeverityJudge,
-  RecommendsRemediationJudge,
+  RecommendsCredentialExposureFixJudge,
 } from "./_judges.js";
 
 const skillRoot = dirname(fileURLToPath(import.meta.url)).replace(/\/evals$/, "");
@@ -25,32 +25,31 @@ describeEval(
   { harness: skilletHarness({ skill: skillRoot }) },
   (it) => {
     it(
-      "report-credential-exposure__artipacked-git-upload",
+      "report-credential-exposure__artipacked-upload-git",
       { timeout: 120_000 },
       async ({ run, behavior, harness }) => {
         behavior("report-credential-exposure");
-        await harness.useFixture("report-credential-exposure__artipacked-git-upload");
+        await harness.useFixture("report-credential-exposure__artipacked-upload-git");
         const result = await run("Audit .github/workflows/release.yml for security issues.");
 
         await expect(result).toSatisfyJudge(IdentifiesCredentialExposureJudge);
         await expect(result).toSatisfyJudge(ConnectsExploitChainJudge);
         await expect(result).toSatisfyJudge(RatesHighSeverityJudge);
-        await expect(result).toSatisfyJudge(RecommendsRemediationJudge);
+        await expect(result).toSatisfyJudge(RecommendsCredentialExposureFixJudge);
       },
     );
 
     it(
-      "report-credential-exposure__derived-secret-in-logs",
+      "report-credential-exposure__secret-written-to-summary",
       { timeout: 120_000 },
       async ({ run, behavior, harness }) => {
         behavior("report-credential-exposure");
-        await harness.useFixture("report-credential-exposure__derived-secret-in-logs");
-        const result = await run("Review .github/workflows/deploy.yml — anything risky?");
+        await harness.useFixture("report-credential-exposure__secret-written-to-summary");
+        const result = await run("Review .github/workflows/deploy.yml for credential handling issues.");
 
         await expect(result).toSatisfyJudge(IdentifiesCredentialExposureJudge);
         await expect(result).toSatisfyJudge(ConnectsExploitChainJudge);
-        await expect(result).toSatisfyJudge(RatesHighSeverityJudge);
-        await expect(result).toSatisfyJudge(RecommendsRemediationJudge);
+        await expect(result).toSatisfyJudge(RecommendsCredentialExposureFixJudge);
       },
     );
   },

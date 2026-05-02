@@ -12,8 +12,8 @@ import {
   skilletHarness,
 } from "@sentry/skillet/evals";
 import {
-  DoesNotFlagYamlStyleJudge,
-  ReturnsNoSecurityFindingsJudge,
+  DoesNotFlagYamlLintJudge,
+  ExplainsNoSecurityIssueJudge,
 } from "./_judges.js";
 
 const skillRoot = dirname(fileURLToPath(import.meta.url)).replace(/\/evals$/, "");
@@ -28,10 +28,10 @@ describeEval(
       async ({ run, behavior, harness }) => {
         behavior("no-yaml-lint");
         await harness.useFixture("no-yaml-lint__missing-names-and-style");
-        const result = await run("Please do a security audit of .github/workflows/build.yml and report any vulnerabilities.");
+        const result = await run("Please do a security audit of .github/workflows/ci.yml and report any vulnerabilities you find.");
 
-        await expect(result).toSatisfyJudge(DoesNotFlagYamlStyleJudge);
-        await expect(result).toSatisfyJudge(ReturnsNoSecurityFindingsJudge);
+        await expect(result).toSatisfyJudge(DoesNotFlagYamlLintJudge);
+        await expect(result).toSatisfyJudge(ExplainsNoSecurityIssueJudge);
       },
     );
   },

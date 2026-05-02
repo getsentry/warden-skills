@@ -6,8 +6,10 @@ jobs:
   process:
     runs-on: ubuntu-latest
     steps:
-      - name: Log title
+      - name: Log discussion
         run: |
           echo "New discussion: ${{ github.event.discussion.title }}"
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Notify
+        run: ./notify.sh "${{ github.event.discussion.title }}"
