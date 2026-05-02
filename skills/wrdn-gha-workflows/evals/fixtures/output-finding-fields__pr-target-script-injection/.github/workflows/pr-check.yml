@@ -1,0 +1,22 @@
+name: PR Check
+on:
+  pull_request_target:
+    types: [opened, synchronize]
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+      - name: Echo title
+        run: |
+          echo "Processing PR: ${{ github.event.pull_request.title }}"
+          npm install
+          npm test
+        env:
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+          DEPLOY_KEY: ${{ secrets.DEPLOY_KEY }}

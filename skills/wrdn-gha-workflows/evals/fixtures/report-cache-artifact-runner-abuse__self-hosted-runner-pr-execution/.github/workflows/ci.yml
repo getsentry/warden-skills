@@ -1,0 +1,12 @@
+name: CI
+on:
+  pull_request:
+jobs:
+  test:
+    runs-on: [self-hosted, linux, persistent]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+      - run: npm install
+      - run: npm test

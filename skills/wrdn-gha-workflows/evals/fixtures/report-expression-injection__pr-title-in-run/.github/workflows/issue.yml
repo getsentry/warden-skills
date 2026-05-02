@@ -1,0 +1,12 @@
+name: Issue Handler
+on:
+  issues:
+    types: [opened]
+jobs:
+  triage:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Echo title
+        run: |
+          echo "New issue: ${{ github.event.issue.title }}"
+          echo "Body: ${{ github.event.issue.body }}"

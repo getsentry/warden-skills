@@ -9,23 +9,15 @@ import { dirname } from "node:path";
 import { expect } from "vitest";
 import {
   describeEval,
-  judge,
   skilletHarness,
 } from "@sentry/skillet/evals";
+import {
+  DoesNotFabricateChainJudge,
+  DropsOrRatesMediumJudge,
+  IdentifiesMissingLinkJudge,
+} from "./_judges.js";
 
 const skillRoot = dirname(fileURLToPath(import.meta.url)).replace(/\/evals$/, "");
-
-const DropsOrMediumConfidenceJudge = judge("DropsOrMediumConfidenceJudge", async ({ criterion }) => {
-  return criterion("Either drops the finding entirely or reports it explicitly as medium (or lower) confidence — does not assert a high-confidence vulnerability.");
-});
-
-const NamesMissingLinkJudge = judge("NamesMissingLinkJudge", async ({ criterion }) => {
-  return criterion("If reporting the finding, names the specific missing link (e.g. the unseen reusable workflow, called action, or downstream consumer) needed to confirm the chain.");
-});
-
-const DoesNotFabricateChainJudge = judge("DoesNotFabricateChainJudge", async ({ criterion }) => {
-  return criterion("Does not assert an exploit chain that requires inspecting files not present in the workspace, and does not invent the contents of the missing artifact.");
-});
 
 describeEval(
   "drop-or-medium-when-untraceable",
@@ -36,11 +28,11 @@ describeEval(
       { timeout: 120_000 },
       async ({ run, behavior, harness }) => {
         behavior("drop-or-medium-when-untraceable");
-        await harness.setup("mkdir -p .github/workflows\ncat > .github/workflows/ci.yml <<'YAML'\nname: CI\non:\n  pull_request_target:\n    types: [opened, synchronize]\njobs:\n  call-shared:\n    uses: my-org/shared-ci/.github/workflows/build.yml@main\n    with:\n      pr_title: ${{ github.event.pull_request.title }}\n      pr_ref: ${{ github.event.pull_request.head.ref }}\n    secrets:\n      NPM_TOKEN: ${{ secrets.NPM_TOKEN }}\nYAML");
-        const result = await run("Audit .github/workflows/ci.yml. Tell me if there is a real vulnerability here.");
+        await harness.useFixture("drop-or-medium-when-untraceable__missing-reusable-workflow");
+        const result = await run("Audit .github/workflows/ci.yml for security issues. Report findings with severity and confidence.");
 
-        await expect(result).toSatisfyJudge(DropsOrMediumConfidenceJudge);
-        await expect(result).toSatisfyJudge(NamesMissingLinkJudge);
+        await expect(result).toSatisfyJudge(DropsOrRatesMediumJudge);
+        await expect(result).toSatisfyJudge(IdentifiesMissingLinkJudge);
         await expect(result).toSatisfyJudge(DoesNotFabricateChainJudge);
       },
     );

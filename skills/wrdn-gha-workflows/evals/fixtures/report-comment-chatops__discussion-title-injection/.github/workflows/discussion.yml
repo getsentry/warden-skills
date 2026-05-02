@@ -1,0 +1,12 @@
+name: Discussion Handler
+on:
+  discussion:
+    types: [created]
+jobs:
+  process:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Echo discussion
+        run: |
+          echo "New discussion: ${{ github.event.discussion.title }}"
+          curl -X POST https://example.com/notify -d "title=${{ github.event.discussion.title }}"

@@ -9,34 +9,31 @@ import { dirname } from "node:path";
 import { expect } from "vitest";
 import {
   describeEval,
-  judge,
   skilletHarness,
 } from "@sentry/skillet/evals";
+import {
+  DoesNotInventChainJudge,
+  ExplainsSecretNotReachableJudge,
+  RecognizesNoUnreachedSecretsJudge,
+} from "./_judges.js";
 
 const skillRoot = dirname(fileURLToPath(import.meta.url)).replace(/\/evals$/, "");
-
-const NoFalsePositiveOnUnreachedSecretJudge = judge("NoFalsePositiveOnUnreachedSecretJudge", async ({ criterion }) => {
-  return criterion("Does NOT flag the secret usage as a vulnerability or exfiltration risk, and does not recommend treating it as exploitable.");
-});
-
-const ExplainsSecretNotReachableJudge = judge("ExplainsSecretNotReachableJudge", async ({ criterion }) => {
-  return criterion("Explains that the secret is used only in a job that does not run attacker-controlled code or consume attacker-controlled artifacts, so there is no exploitable path.");
-});
 
 describeEval(
   "no-unreached-secrets",
   { harness: skilletHarness({ skill: skillRoot }) },
   (it) => {
     it(
-      "no-unreached-secrets__push-main-deploy",
+      "no-unreached-secrets__push-main-build-with-secret",
       { timeout: 120_000 },
       async ({ run, behavior, harness }) => {
         behavior("no-unreached-secrets");
-        await harness.setup("mkdir -p .github/workflows\ncat > .github/workflows/deploy.yml <<'YAML'\nname: Deploy\non:\n  push:\n    branches: [main]\njobs:\n  publish:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: actions/checkout@v4\n      - uses: actions/setup-node@v4\n        with:\n          node-version: '20'\n      - run: npm ci\n      - run: npm publish\n        env:\n          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}\nYAML");
-        const result = await run("Audit .github/workflows/deploy.yml — is the use of NPM_TOKEN here a security issue?");
+        await harness.useFixture("no-unreached-secrets__push-main-build-with-secret");
+        const result = await run("Audit .github/workflows/release.yml for security issues. Are the secrets here at risk?");
 
-        await expect(result).toSatisfyJudge(NoFalsePositiveOnUnreachedSecretJudge);
+        await expect(result).toSatisfyJudge(RecognizesNoUnreachedSecretsJudge);
         await expect(result).toSatisfyJudge(ExplainsSecretNotReachableJudge);
+        await expect(result).toSatisfyJudge(DoesNotInventChainJudge);
       },
     );
   },

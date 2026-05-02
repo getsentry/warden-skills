@@ -1,0 +1,15 @@
+name: Run Tests
+description: Runs project tests
+inputs:
+  label:
+    description: PR label
+    required: true
+runs:
+  using: composite
+  steps:
+    - name: Echo label
+      shell: bash
+      run: echo "Testing ${{ inputs.label }}"
+    - name: Run tests
+      shell: bash
+      run: ./scripts/test.sh

@@ -1,0 +1,13 @@
+name: Lint
+on:
+  pull_request:
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: some-vendor/lint-action@v2
+        with:
+          config: .lintrc

@@ -1,0 +1,9 @@
+name: SHA
+on:
+  pull_request_target:
+jobs:
+  log:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Log SHA
+        run: echo "Head SHA is ${{ github.event.pull_request.head.sha }}"

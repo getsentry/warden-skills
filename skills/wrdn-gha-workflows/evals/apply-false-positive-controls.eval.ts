@@ -9,50 +9,66 @@ import { dirname } from "node:path";
 import { expect } from "vitest";
 import {
   describeEval,
-  judge,
   skilletHarness,
 } from "@sentry/skillet/evals";
+import {
+  RecognizesNoChoiceInputRceJudge,
+  RecognizesNoMaintainerApprovalAsPinJudge,
+  RecognizesNoPersistCredentialsFalseSavesJudge,
+  RecognizesNoPwnRequestOnBaseCheckoutJudge,
+} from "./_judges.js";
 
 const skillRoot = dirname(fileURLToPath(import.meta.url)).replace(/\/evals$/, "");
-
-const TreatsPullRequestTargetCheckoutAsBaseJudge = judge("TreatsPullRequestTargetCheckoutAsBaseJudge", async ({ criterion }) => {
-  return criterion("Recognizes that default checkout under pull_request_target checks out base repository code, not PR code, and does not flag it as compromised.");
-});
-
-const DoesNotEscalatePullRequestJudge = judge("DoesNotEscalatePullRequestJudge", async ({ criterion }) => {
-  return criterion("Does NOT flag the plain pull_request workflow as high-risk; treats it as intentionally less privileged with a read-only token.");
-});
-
-const ExplainsSafeBaseCheckoutJudge = judge("ExplainsSafeBaseCheckoutJudge", async ({ criterion }) => {
-  return criterion("Explains that without an explicit ref override, the checkout pulls trusted base code rather than attacker PR code.");
-});
 
 describeEval(
   "apply-false-positive-controls",
   { harness: skilletHarness({ skill: skillRoot }) },
   (it) => {
     it(
-      "apply-false-positive-controls__pr-target-default-checkout",
+      "apply-false-positive-controls__base-checkout-under-pr-target",
       { timeout: 120_000 },
       async ({ run, behavior, harness }) => {
         behavior("apply-false-positive-controls");
-        await harness.setup("mkdir -p .github/workflows\ncat > .github/workflows/label.yml <<'YAML'\nname: Label PR\non:\n  pull_request_target:\n    types: [opened, synchronize]\njobs:\n  label:\n    runs-on: ubuntu-latest\n    permissions:\n      pull-requests: write\n    steps:\n      - uses: actions/checkout@v4\n      - name: Read CODEOWNERS\n        run: cat .github/CODEOWNERS\nYAML");
-        const result = await run("Is there a code-execution vulnerability in .github/workflows/label.yml? It uses pull_request_target and runs actions/checkout.");
+        await harness.useFixture("apply-false-positive-controls__base-checkout-under-pr-target");
+        const result = await run("Audit .github/workflows/label.yml. Is this a pwn-request vulnerability?");
 
-        await expect(result).toSatisfyJudge(TreatsPullRequestTargetCheckoutAsBaseJudge);
-        await expect(result).toSatisfyJudge(ExplainsSafeBaseCheckoutJudge);
+        await expect(result).toSatisfyJudge(RecognizesNoPwnRequestOnBaseCheckoutJudge);
       },
     );
 
     it(
-      "apply-false-positive-controls__plain-pull-request",
+      "apply-false-positive-controls__persist-credentials-false-not-savior",
       { timeout: 120_000 },
       async ({ run, behavior, harness }) => {
         behavior("apply-false-positive-controls");
-        await harness.setup("mkdir -p .github/workflows\ncat > .github/workflows/test.yml <<'YAML'\nname: Test\non:\n  pull_request:\njobs:\n  test:\n    runs-on: ubuntu-latest\n    permissions:\n      contents: read\n    steps:\n      - uses: actions/checkout@v4\n      - run: npm ci && npm test\nYAML");
-        const result = await run("Audit .github/workflows/test.yml. It runs untrusted PR code — is that a vulnerability?");
+        await harness.useFixture("apply-false-positive-controls__persist-credentials-false-not-savior");
+        const result = await run("Someone says persist-credentials: false makes this workflow safe. Audit .github/workflows/build.yml.");
 
-        await expect(result).toSatisfyJudge(DoesNotEscalatePullRequestJudge);
+        await expect(result).toSatisfyJudge(RecognizesNoPersistCredentialsFalseSavesJudge);
+      },
+    );
+
+    it(
+      "apply-false-positive-controls__hardcoded-choice-input-safe",
+      { timeout: 120_000 },
+      async ({ run, behavior, harness }) => {
+        behavior("apply-false-positive-controls");
+        await harness.useFixture("apply-false-positive-controls__hardcoded-choice-input-safe");
+        const result = await run("Audit .github/workflows/deploy.yml — is the choice input an RCE?");
+
+        await expect(result).toSatisfyJudge(RecognizesNoChoiceInputRceJudge);
+      },
+    );
+
+    it(
+      "apply-false-positive-controls__approval-not-sha-pin",
+      { timeout: 120_000 },
+      async ({ run, behavior, harness }) => {
+        behavior("apply-false-positive-controls");
+        await harness.useFixture("apply-false-positive-controls__approval-not-sha-pin");
+        const result = await run("We require maintainer approval via a protected environment before this workflow runs. Does that make the third-party action reference safe? Audit .github/workflows/release.yml.");
+
+        await expect(result).toSatisfyJudge(RecognizesNoMaintainerApprovalAsPinJudge);
       },
     );
   },

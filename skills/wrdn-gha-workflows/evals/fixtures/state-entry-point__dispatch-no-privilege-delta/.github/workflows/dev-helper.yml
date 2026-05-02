@@ -1,0 +1,16 @@
+name: Dev Helper
+on:
+  workflow_dispatch:
+    inputs:
+      message:
+        description: 'Message to print'
+        required: true
+        type: string
+jobs:
+  echo:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Print
+        run: echo "${{ inputs.message }}"

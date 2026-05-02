@@ -1,0 +1,21 @@
+name: Integration Tests
+on:
+  pull_request_target:
+    types: [labeled]
+
+jobs:
+  integration:
+    if: github.event.label.name == 'ok-to-test'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+      - name: Run integration suite
+        run: |
+          npm ci
+          npm run integration
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          DEPLOY_TOKEN: ${{ secrets.DEPLOY_TOKEN }}

@@ -1,0 +1,14 @@
+name: Notify
+on:
+  push:
+    branches: [main]
+jobs:
+  notify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Print commit SHA
+        run: echo "Build for commit ${{ github.sha }} on ${{ github.repository }}"
+      - name: Print run number
+        env:
+          RUN_NUM: ${{ github.run_number }}
+        run: echo "Run number is $RUN_NUM"

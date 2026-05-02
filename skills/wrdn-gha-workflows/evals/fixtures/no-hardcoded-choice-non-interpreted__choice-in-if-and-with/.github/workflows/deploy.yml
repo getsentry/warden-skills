@@ -1,0 +1,40 @@
+name: Deploy
+on:
+  workflow_dispatch:
+    inputs:
+      target:
+        description: 'Deploy target'
+        required: true
+        type: choice
+        options:
+          - staging
+          - production
+          - canary
+      dry_run:
+        description: 'Dry run'
+        required: true
+        type: boolean
+        default: true
+      replicas:
+        description: 'Replica count'
+        required: true
+        type: number
+        default: 3
+      env_name:
+        description: 'Environment'
+        required: true
+        type: environment
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.env_name }}
+    if: ${{ inputs.target == 'production' }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Deploy
+        uses: some-org/deploy-action@v1
+        with:
+          target: ${{ inputs.target }}
+          dry-run: ${{ inputs.dry_run }}
+          replicas: ${{ inputs.replicas }}

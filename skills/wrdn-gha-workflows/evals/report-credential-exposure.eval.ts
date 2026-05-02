@@ -9,23 +9,16 @@ import { dirname } from "node:path";
 import { expect } from "vitest";
 import {
   describeEval,
-  judge,
   skilletHarness,
 } from "@sentry/skillet/evals";
+import {
+  ConnectsPersistCredentialsJudge,
+  IdentifiesCredentialExposureJudge,
+  RatesCredentialExposureSeverityJudge,
+  RecommendsCredentialExposureFixJudge,
+} from "./_judges.js";
 
 const skillRoot = dirname(fileURLToPath(import.meta.url)).replace(/\/evals$/, "");
-
-const IdentifiesArtiPACKEDExposureJudge = judge("IdentifiesArtiPACKEDExposureJudge", async ({ criterion }) => {
-  return criterion("Identifies that uploading the entire workspace or .git directory as an artifact exposes the persisted GITHUB_TOKEN or git credentials.");
-});
-
-const ConnectsPersistedCredentialsJudge = judge("ConnectsPersistedCredentialsJudge", async ({ criterion }) => {
-  return criterion("Explains that actions/checkout persists credentials in .git/config by default, making them harvestable from the artifact.");
-});
-
-const RecommendsScopingArtifactJudge = judge("RecommendsScopingArtifactJudge", async ({ criterion }) => {
-  return criterion("Recommends excluding .git or scoping the upload path, or disabling persist-credentials, rather than only generic 'review permissions' advice.");
-});
 
 describeEval(
   "report-credential-exposure",
@@ -36,12 +29,13 @@ describeEval(
       { timeout: 120_000 },
       async ({ run, behavior, harness }) => {
         behavior("report-credential-exposure");
-        await harness.setup("mkdir -p .github/workflows\ncat > .github/workflows/build.yml <<'YAML'\nname: Build\non:\n  push:\n    branches: [main]\njobs:\n  build:\n    runs-on: ubuntu-latest\n    permissions:\n      contents: write\n    steps:\n      - uses: actions/checkout@v4\n      - run: make build\n      - uses: actions/upload-artifact@v4\n        with:\n          name: workspace\n          path: .\nYAML");
-        const result = await run("Review .github/workflows/build.yml for security issues that could leak credentials.");
+        await harness.useFixture("report-credential-exposure__artipacked-git-upload");
+        const result = await run("Please audit .github/workflows/release.yml for security issues and report any credential exposure risks.");
 
-        await expect(result).toSatisfyJudge(IdentifiesArtiPACKEDExposureJudge);
-        await expect(result).toSatisfyJudge(ConnectsPersistedCredentialsJudge);
-        await expect(result).toSatisfyJudge(RecommendsScopingArtifactJudge);
+        await expect(result).toSatisfyJudge(IdentifiesCredentialExposureJudge);
+        await expect(result).toSatisfyJudge(ConnectsPersistCredentialsJudge);
+        await expect(result).toSatisfyJudge(RatesCredentialExposureSeverityJudge);
+        await expect(result).toSatisfyJudge(RecommendsCredentialExposureFixJudge);
       },
     );
   },
