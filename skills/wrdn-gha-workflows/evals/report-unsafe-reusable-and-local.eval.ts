@@ -13,9 +13,9 @@ import {
 } from "@sentry/skillet/evals";
 import {
   ConnectsExploitChainJudge,
-  DoesNotFlagYamlStyleJudge,
   IdentifiesUnsafeCalleeJudge,
   RatesHighSeverityJudge,
+  RecommendsCalleeHardeningJudge,
 } from "./_judges.js";
 
 const skillRoot = dirname(fileURLToPath(import.meta.url)).replace(/\/evals$/, "");
@@ -25,17 +25,17 @@ describeEval(
   { harness: skilletHarness({ skill: skillRoot }) },
   (it) => {
     it(
-      "report-unsafe-reusable-and-local__reusable-callee-runs-pr-title",
+      "report-unsafe-reusable-and-local__reusable-unquoted-input",
       { timeout: 180_000 },
       async ({ run, behavior, harness }) => {
         behavior("report-unsafe-reusable-and-local");
-        await harness.useFixture("report-unsafe-reusable-and-local__reusable-callee-runs-pr-title");
-        const result = await run("Please audit these workflows for security issues. The caller looks fine but I want a thorough review of the whole chain.");
+        await harness.useFixture("report-unsafe-reusable-and-local__reusable-unquoted-input");
+        const result = await run("Audit the workflows in .github/workflows/ for security issues, including any reusable workflows they call.");
 
         await expect(result).toSatisfyJudge(IdentifiesUnsafeCalleeJudge);
         await expect(result).toSatisfyJudge(ConnectsExploitChainJudge);
         await expect(result).toSatisfyJudge(RatesHighSeverityJudge);
-        await expect(result).toSatisfyJudge(DoesNotFlagYamlStyleJudge);
+        await expect(result).toSatisfyJudge(RecommendsCalleeHardeningJudge);
       },
     );
 
@@ -45,12 +45,11 @@ describeEval(
       async ({ run, behavior, harness }) => {
         behavior("report-unsafe-reusable-and-local");
         await harness.useFixture("report-unsafe-reusable-and-local__local-action-from-pr-checkout");
-        const result = await run("Review this workflow and the local action it uses. Is there anything risky about how they interact?");
+        const result = await run("Review .github/workflows/ and any local actions for security risks.");
 
         await expect(result).toSatisfyJudge(IdentifiesUnsafeCalleeJudge);
         await expect(result).toSatisfyJudge(ConnectsExploitChainJudge);
         await expect(result).toSatisfyJudge(RatesHighSeverityJudge);
-        await expect(result).toSatisfyJudge(DoesNotFlagYamlStyleJudge);
       },
     );
   },

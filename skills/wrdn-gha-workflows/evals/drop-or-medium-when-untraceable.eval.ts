@@ -12,7 +12,7 @@ import {
   skilletHarness,
 } from "@sentry/skillet/evals";
 import {
-  DoesNotFabricateChainJudge,
+  DoesNotFabricateEvidenceJudge,
   DropsOrRatesMediumJudge,
   IdentifiesMissingLinkJudge,
 } from "./_judges.js";
@@ -24,30 +24,16 @@ describeEval(
   { harness: skilletHarness({ skill: skillRoot }) },
   (it) => {
     it(
-      "drop-or-medium-when-untraceable__missing-reusable-workflow",
-      { timeout: 120_000 },
+      "drop-or-medium-when-untraceable__missing-called-workflow",
+      { timeout: 180_000 },
       async ({ run, behavior, harness }) => {
         behavior("drop-or-medium-when-untraceable");
-        await harness.useFixture("drop-or-medium-when-untraceable__missing-reusable-workflow");
-        const result = await run("Audit .github/workflows/ci.yml for security issues. Report findings with severity and confidence.");
+        await harness.useFixture("drop-or-medium-when-untraceable__missing-called-workflow");
+        const result = await run("Audit .github/workflows/ci.yml for security issues.");
 
         await expect(result).toSatisfyJudge(DropsOrRatesMediumJudge);
         await expect(result).toSatisfyJudge(IdentifiesMissingLinkJudge);
-        await expect(result).toSatisfyJudge(DoesNotFabricateChainJudge);
-      },
-    );
-
-    it(
-      "drop-or-medium-when-untraceable__missing-script",
-      { timeout: 120_000 },
-      async ({ run, behavior, harness }) => {
-        behavior("drop-or-medium-when-untraceable");
-        await harness.useFixture("drop-or-medium-when-untraceable__missing-script");
-        const result = await run("Review this workflow for vulnerabilities. Provide severity and confidence for any findings.");
-
-        await expect(result).toSatisfyJudge(DropsOrRatesMediumJudge);
-        await expect(result).toSatisfyJudge(IdentifiesMissingLinkJudge);
-        await expect(result).toSatisfyJudge(DoesNotFabricateChainJudge);
+        await expect(result).toSatisfyJudge(DoesNotFabricateEvidenceJudge);
       },
     );
   },

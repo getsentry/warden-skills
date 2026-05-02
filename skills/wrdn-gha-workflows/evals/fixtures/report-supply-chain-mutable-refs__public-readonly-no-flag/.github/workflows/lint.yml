@@ -1,0 +1,13 @@
+name: Lint
+on:
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: reviewdog/action-eslint@v1
+        with:
+          reporter: github-check

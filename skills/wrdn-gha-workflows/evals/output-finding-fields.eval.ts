@@ -12,11 +12,11 @@ import {
   skilletHarness,
 } from "@sentry/skillet/evals";
 import {
-  IncludesConfidenceAndPatchJudge,
-  IncludesControlledInputAndExecutionJudge,
-  IncludesFileLineEntryPointJudge,
-  IncludesPrivilegesAndImpactJudge,
-  ListsReviewedPathsWhenCleanJudge,
+  IncludesConcreteFixPatchJudge,
+  IncludesConfidenceJudge,
+  IncludesFileAndLineJudge,
+  IncludesTriggerInputAndImpactJudge,
+  StatesNoFindingsAndListsReviewedJudge,
 } from "./_judges.js";
 
 const skillRoot = dirname(fileURLToPath(import.meta.url)).replace(/\/evals$/, "");
@@ -26,29 +26,29 @@ describeEval(
   { harness: skilletHarness({ skill: skillRoot }) },
   (it) => {
     it(
-      "output-finding-fields__pwn-request-script-injection",
+      "output-finding-fields__pwn-request-full-fields",
       { timeout: 180_000 },
       async ({ run, behavior, harness }) => {
         behavior("output-finding-fields");
-        await harness.useFixture("output-finding-fields__pwn-request-script-injection");
-        const result = await run("Audit .github/workflows/ for security issues and report any findings with full context.");
+        await harness.useFixture("output-finding-fields__pwn-request-full-fields");
+        const result = await run("Audit the workflows under .github/workflows/ for security issues and report any findings.");
 
-        await expect(result).toSatisfyJudge(IncludesFileLineEntryPointJudge);
-        await expect(result).toSatisfyJudge(IncludesControlledInputAndExecutionJudge);
-        await expect(result).toSatisfyJudge(IncludesPrivilegesAndImpactJudge);
-        await expect(result).toSatisfyJudge(IncludesConfidenceAndPatchJudge);
+        await expect(result).toSatisfyJudge(IncludesFileAndLineJudge);
+        await expect(result).toSatisfyJudge(IncludesTriggerInputAndImpactJudge);
+        await expect(result).toSatisfyJudge(IncludesConfidenceJudge);
+        await expect(result).toSatisfyJudge(IncludesConcreteFixPatchJudge);
       },
     );
 
     it(
-      "output-finding-fields__no-findings-lists-paths",
+      "output-finding-fields__no-findings-lists-reviewed",
       { timeout: 180_000 },
       async ({ run, behavior, harness }) => {
         behavior("output-finding-fields");
-        await harness.useFixture("output-finding-fields__no-findings-lists-paths");
-        const result = await run("Audit the workflows in .github/workflows/ for security issues. If you find nothing, tell me what you reviewed.");
+        await harness.useFixture("output-finding-fields__no-findings-lists-reviewed");
+        const result = await run("Please audit the workflows in .github/workflows/ for security issues and tell me what you find.");
 
-        await expect(result).toSatisfyJudge(ListsReviewedPathsWhenCleanJudge);
+        await expect(result).toSatisfyJudge(StatesNoFindingsAndListsReviewedJudge);
       },
     );
   },

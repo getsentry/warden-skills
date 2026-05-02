@@ -14,9 +14,9 @@ import {
 import {
   ConnectsPrivilegedContextJudge,
   DoesNotFlagFirstPartyActionsJudge,
-  DoesNotFlagPublicReadOnlyJudge,
-  IdentifiesMutableRefJudge,
-  RecommendsShaPinningJudge,
+  DoesNotFlagMutableRefJudge,
+  IdentifiesMutableThirdPartyRefJudge,
+  RecommendsPinToShaJudge,
 } from "./_judges.js";
 
 const skillRoot = dirname(fileURLToPath(import.meta.url)).replace(/\/evals$/, "");
@@ -26,29 +26,29 @@ describeEval(
   { harness: skilletHarness({ skill: skillRoot }) },
   (it) => {
     it(
-      "report-supply-chain-mutable-refs__publish-job-tag-pin",
-      { timeout: 120_000 },
+      "report-supply-chain-mutable-refs__publish-job-tag-ref",
+      { timeout: 180_000 },
       async ({ run, behavior, harness }) => {
         behavior("report-supply-chain-mutable-refs");
-        await harness.useFixture("report-supply-chain-mutable-refs__publish-job-tag-pin");
+        await harness.useFixture("report-supply-chain-mutable-refs__publish-job-tag-ref");
         const result = await run("Audit .github/workflows/release.yml for security issues.");
 
-        await expect(result).toSatisfyJudge(IdentifiesMutableRefJudge);
+        await expect(result).toSatisfyJudge(IdentifiesMutableThirdPartyRefJudge);
         await expect(result).toSatisfyJudge(ConnectsPrivilegedContextJudge);
-        await expect(result).toSatisfyJudge(RecommendsShaPinningJudge);
+        await expect(result).toSatisfyJudge(RecommendsPinToShaJudge);
         await expect(result).toSatisfyJudge(DoesNotFlagFirstPartyActionsJudge);
       },
     );
 
     it(
-      "report-supply-chain-mutable-refs__public-readonly-skip",
+      "report-supply-chain-mutable-refs__public-readonly-no-flag",
       { timeout: 120_000 },
       async ({ run, behavior, harness }) => {
         behavior("report-supply-chain-mutable-refs");
-        await harness.useFixture("report-supply-chain-mutable-refs__public-readonly-skip");
-        const result = await run("Review .github/workflows/lint.yml for supply chain issues.");
+        await harness.useFixture("report-supply-chain-mutable-refs__public-readonly-no-flag");
+        const result = await run("Audit .github/workflows/lint.yml for supply-chain risks.");
 
-        await expect(result).toSatisfyJudge(DoesNotFlagPublicReadOnlyJudge);
+        await expect(result).toSatisfyJudge(DoesNotFlagMutableRefJudge);
         await expect(result).toSatisfyJudge(DoesNotFlagFirstPartyActionsJudge);
       },
     );

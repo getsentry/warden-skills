@@ -1,0 +1,18 @@
+name: Deploy
+on:
+  push:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compute auth header
+        run: |
+          AUTH=$(echo -n "user:${{ secrets.API_TOKEN }}" | base64)
+          echo "Authorization header: $AUTH"
+          echo "auth=$AUTH" >> $GITHUB_OUTPUT
+        id: auth
+      - run: curl -H "Authorization: Basic ${{ steps.auth.outputs.auth }}" https://api.example.com/deploy

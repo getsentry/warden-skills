@@ -2,8 +2,8 @@ name: Deploy
 on:
   workflow_dispatch:
     inputs:
-      target:
-        description: 'Deploy target'
+      environment:
+        description: 'Target environment'
         type: choice
         required: true
         options:
@@ -13,13 +13,20 @@ on:
         description: 'Dry run'
         type: boolean
         default: true
+      replicas:
+        description: 'Replica count'
+        type: number
+        default: 3
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    if: ${{ inputs.environment == 'production' }}
     steps:
       - uses: actions/checkout@v4
-      - if: inputs.target == 'production'
-        uses: some-org/deploy-action@v1
+      - uses: some-org/deployer@v1
         with:
-          environment: ${{ inputs.target }}
+          env: ${{ inputs.environment }}
           dry-run: ${{ inputs.dry_run }}
+          replicas: ${{ inputs.replicas }}
+        env:
+          TARGET: "${{ inputs.environment }}"

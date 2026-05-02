@@ -2,11 +2,8 @@ name: Build
 on:
   pull_request:
 jobs:
-  build:
+  log:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
       - name: Log SHA
-        run: |
-          echo "Building ${{ github.event.pull_request.head.sha }}"
-          echo "sha=${{ github.event.pull_request.head.sha }}" >> $GITHUB_OUTPUT
+        run: echo "Building ${{ github.event.pull_request.head.sha }}"

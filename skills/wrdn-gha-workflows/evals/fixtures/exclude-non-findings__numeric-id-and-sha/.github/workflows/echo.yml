@@ -1,8 +1,0 @@
-name: Echo PR
-on:
-  pull_request:
-jobs:
-  echo:
-    runs-on: ubuntu-latest
-    steps:
-      - run: echo "PR ${{ github.event.pull_request.number }} at ${{ github.event.pull_request.head.sha }}"

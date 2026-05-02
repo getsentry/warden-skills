@@ -1,0 +1,18 @@
+name: Dev Helper
+on:
+  workflow_dispatch:
+    inputs:
+      target:
+        description: 'Build target'
+        required: true
+        type: string
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          echo "Building ${{ github.event.inputs.target }}"
+          make ${{ github.event.inputs.target }}

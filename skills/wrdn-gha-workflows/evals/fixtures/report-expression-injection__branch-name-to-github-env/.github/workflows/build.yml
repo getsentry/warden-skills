@@ -5,11 +5,10 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - name: Set branch env
+      - name: Set branch
         run: |
-          echo "BRANCH=${{ github.head_ref }}" >> $GITHUB_ENV
-      - name: Build
-        run: |
-          make build BRANCH="$BRANCH"
+          echo "BRANCH=${{ github.event.pull_request.head.ref }}" >> $GITHUB_ENV
+      - name: Deploy
+        run: ./deploy.sh
         env:
-          DEPLOY_KEY: ${{ secrets.DEPLOY_KEY }}
+          DEPLOY_TOKEN: ${{ secrets.DEPLOY_TOKEN }}

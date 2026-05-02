@@ -12,9 +12,9 @@ import {
   skilletHarness,
 } from "@sentry/skillet/evals";
 import {
-  DoesNotFlagFirstPartyTagJudge,
+  DoesNotFlagFirstPartyActionsJudge,
   DoesNotFlagMutableRefJudge,
-  ExplainsLowImpactContextJudge,
+  ExplainsNoExploitablePathJudge,
 } from "./_judges.js";
 
 const skillRoot = dirname(fileURLToPath(import.meta.url)).replace(/\/evals$/, "");
@@ -32,8 +32,8 @@ describeEval(
         const result = await run("Audit .github/workflows/lint.yml for security issues.");
 
         await expect(result).toSatisfyJudge(DoesNotFlagMutableRefJudge);
-        await expect(result).toSatisfyJudge(DoesNotFlagFirstPartyTagJudge);
-        await expect(result).toSatisfyJudge(ExplainsLowImpactContextJudge);
+        await expect(result).toSatisfyJudge(DoesNotFlagFirstPartyActionsJudge);
+        await expect(result).toSatisfyJudge(ExplainsNoExploitablePathJudge);
       },
     );
   },

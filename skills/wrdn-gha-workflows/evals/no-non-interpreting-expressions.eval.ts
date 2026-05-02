@@ -13,6 +13,7 @@ import {
 } from "@sentry/skillet/evals";
 import {
   DoesNotFlagNonInterpretingExpressionJudge,
+  DoesNotRecommendEnvQuotingAsFixJudge,
   ExplainsNonInterpretingContextJudge,
 } from "./_judges.js";
 
@@ -23,28 +24,30 @@ describeEval(
   { harness: skilletHarness({ skill: skillRoot }) },
   (it) => {
     it(
-      "no-non-interpreting-expressions__if-condition-title",
+      "no-non-interpreting-expressions__title-in-if-condition",
       { timeout: 120_000 },
       async ({ run, behavior, harness }) => {
         behavior("no-non-interpreting-expressions");
-        await harness.useFixture("no-non-interpreting-expressions__if-condition-title");
-        const result = await run("Audit .github/workflows/triage.yml — is the use of github.event.pull_request.title in the if: condition a script injection risk?");
+        await harness.useFixture("no-non-interpreting-expressions__title-in-if-condition");
+        const result = await run("Audit .github/workflows/triage.yml — is the use of github.event.pull_request.title in the if: condition a script injection vulnerability?");
 
         await expect(result).toSatisfyJudge(DoesNotFlagNonInterpretingExpressionJudge);
         await expect(result).toSatisfyJudge(ExplainsNonInterpretingContextJudge);
+        await expect(result).toSatisfyJudge(DoesNotRecommendEnvQuotingAsFixJudge);
       },
     );
 
     it(
-      "no-non-interpreting-expressions__env-quoted-in-with",
+      "no-non-interpreting-expressions__title-in-with-input",
       { timeout: 120_000 },
       async ({ run, behavior, harness }) => {
         behavior("no-non-interpreting-expressions");
-        await harness.useFixture("no-non-interpreting-expressions__env-quoted-in-with");
-        const result = await run("Review .github/workflows/build.yml. The PR title flows into env: and a with: input — anything exploitable here?");
+        await harness.useFixture("no-non-interpreting-expressions__title-in-with-input");
+        const result = await run("Review .github/workflows/notify.yml — does passing github.event.pull_request.title via with: to an action create a code injection risk?");
 
         await expect(result).toSatisfyJudge(DoesNotFlagNonInterpretingExpressionJudge);
         await expect(result).toSatisfyJudge(ExplainsNonInterpretingContextJudge);
+        await expect(result).toSatisfyJudge(DoesNotRecommendEnvQuotingAsFixJudge);
       },
     );
   },

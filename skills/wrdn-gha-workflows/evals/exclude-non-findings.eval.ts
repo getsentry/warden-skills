@@ -12,9 +12,9 @@ import {
   skilletHarness,
 } from "@sentry/skillet/evals";
 import {
-  DoesNotFlagFirstPartyTagRefJudge,
   DoesNotFlagOutOfScopeJudge,
   DoesNotFlagSafeResolvedValueJudge,
+  DoesNotFlagUnreachedSecretsJudge,
   DoesNotFlagYamlStyleJudge,
   ExplainsOutOfScopeJudge,
 } from "./_judges.js";
@@ -31,7 +31,7 @@ describeEval(
       async ({ run, behavior, harness }) => {
         behavior("exclude-non-findings");
         await harness.useFixture("exclude-non-findings__metadata-only-pr-target");
-        const result = await run("Audit .github/workflows/label.yml for security vulnerabilities and report any findings.");
+        const result = await run("Audit .github/workflows/labeler.yml for security vulnerabilities.");
 
         await expect(result).toSatisfyJudge(DoesNotFlagOutOfScopeJudge);
         await expect(result).toSatisfyJudge(ExplainsOutOfScopeJudge);
@@ -39,52 +39,28 @@ describeEval(
     );
 
     it(
-      "exclude-non-findings__numeric-id-and-sha",
+      "exclude-non-findings__numeric-id-and-yaml-style",
       { timeout: 120_000 },
       async ({ run, behavior, harness }) => {
         behavior("exclude-non-findings");
-        await harness.useFixture("exclude-non-findings__numeric-id-and-sha");
-        const result = await run("Is there an injection risk in this workflow? Audit .github/workflows/echo.yml.");
+        await harness.useFixture("exclude-non-findings__numeric-id-and-yaml-style");
+        const result = await run("Review .github/workflows/comment.yml — anything to worry about?");
 
         await expect(result).toSatisfyJudge(DoesNotFlagSafeResolvedValueJudge);
+        await expect(result).toSatisfyJudge(DoesNotFlagYamlStyleJudge);
         await expect(result).toSatisfyJudge(ExplainsOutOfScopeJudge);
       },
     );
 
     it(
-      "exclude-non-findings__yaml-style-nits",
+      "exclude-non-findings__secrets-in-isolated-job",
       { timeout: 120_000 },
       async ({ run, behavior, harness }) => {
         behavior("exclude-non-findings");
-        await harness.useFixture("exclude-non-findings__yaml-style-nits");
-        const result = await run("Audit .github/workflows/build.yml for security issues.");
+        await harness.useFixture("exclude-non-findings__secrets-in-isolated-job");
+        const result = await run("Check .github/workflows/release.yml for security issues.");
 
-        await expect(result).toSatisfyJudge(DoesNotFlagYamlStyleJudge);
-        await expect(result).toSatisfyJudge(DoesNotFlagOutOfScopeJudge);
-      },
-    );
-
-    it(
-      "exclude-non-findings__first-party-tag-ref",
-      { timeout: 120_000 },
-      async ({ run, behavior, harness }) => {
-        behavior("exclude-non-findings");
-        await harness.useFixture("exclude-non-findings__first-party-tag-ref");
-        const result = await run("Review .github/workflows/release.yml — any risks from how actions are referenced?");
-
-        await expect(result).toSatisfyJudge(DoesNotFlagFirstPartyTagRefJudge);
-        await expect(result).toSatisfyJudge(DoesNotFlagOutOfScopeJudge);
-      },
-    );
-
-    it(
-      "exclude-non-findings__hardcoded-choice-input",
-      { timeout: 120_000 },
-      async ({ run, behavior, harness }) => {
-        behavior("exclude-non-findings");
-        await harness.useFixture("exclude-non-findings__hardcoded-choice-input");
-        const result = await run("Audit .github/workflows/deploy.yml for injection or RCE risks tied to the manual input.");
-
+        await expect(result).toSatisfyJudge(DoesNotFlagUnreachedSecretsJudge);
         await expect(result).toSatisfyJudge(DoesNotFlagOutOfScopeJudge);
         await expect(result).toSatisfyJudge(ExplainsOutOfScopeJudge);
       },

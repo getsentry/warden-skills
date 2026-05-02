@@ -13,7 +13,7 @@ import {
 } from "@sentry/skillet/evals";
 import {
   DoesNotFlagMetadataOnlyPrTargetJudge,
-  ExplainsNoCheckoutOrCodeExecutionJudge,
+  ExplainsNoPrCodeExecutionJudge,
 } from "./_judges.js";
 
 const skillRoot = dirname(fileURLToPath(import.meta.url)).replace(/\/evals$/, "");
@@ -23,28 +23,28 @@ describeEval(
   { harness: skilletHarness({ skill: skillRoot }) },
   (it) => {
     it(
-      "no-metadata-only-pr-target__auto-label",
+      "no-metadata-only-pr-target__labeler-only",
       { timeout: 120_000 },
       async ({ run, behavior, harness }) => {
         behavior("no-metadata-only-pr-target");
-        await harness.useFixture("no-metadata-only-pr-target__auto-label");
-        const result = await run("Please audit .github/workflows/label.yml for security issues and tell me if there's anything to worry about.");
+        await harness.useFixture("no-metadata-only-pr-target__labeler-only");
+        const result = await run("Audit .github/workflows/labeler.yml for security issues. Is the use of pull_request_target a vulnerability?");
 
         await expect(result).toSatisfyJudge(DoesNotFlagMetadataOnlyPrTargetJudge);
-        await expect(result).toSatisfyJudge(ExplainsNoCheckoutOrCodeExecutionJudge);
+        await expect(result).toSatisfyJudge(ExplainsNoPrCodeExecutionJudge);
       },
     );
 
     it(
-      "no-metadata-only-pr-target__welcome-comment",
+      "no-metadata-only-pr-target__comment-on-pr",
       { timeout: 120_000 },
       async ({ run, behavior, harness }) => {
         behavior("no-metadata-only-pr-target");
-        await harness.useFixture("no-metadata-only-pr-target__welcome-comment");
-        const result = await run("Is there a pwn-request risk in .github/workflows/welcome.yml?");
+        await harness.useFixture("no-metadata-only-pr-target__comment-on-pr");
+        const result = await run("Review .github/workflows/welcome.yml — anything exploitable about the pull_request_target trigger?");
 
         await expect(result).toSatisfyJudge(DoesNotFlagMetadataOnlyPrTargetJudge);
-        await expect(result).toSatisfyJudge(ExplainsNoCheckoutOrCodeExecutionJudge);
+        await expect(result).toSatisfyJudge(ExplainsNoPrCodeExecutionJudge);
       },
     );
   },

@@ -1,0 +1,13 @@
+name: Comment Handler
+on:
+  issue_comment:
+    types: [created]
+jobs:
+  handle:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/github-script@v7
+        with:
+          script: |
+            const body = `${{ github.event.comment.body }}`;
+            console.log('got:', body);

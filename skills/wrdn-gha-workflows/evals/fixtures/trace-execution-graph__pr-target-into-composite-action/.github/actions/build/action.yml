@@ -1,0 +1,21 @@
+name: 'Build'
+description: 'Builds the project from checked out source'
+inputs:
+  pr-title:
+    description: 'Title of the PR'
+    required: true
+runs:
+  using: 'composite'
+  steps:
+    - name: Install deps
+      shell: bash
+      run: |
+        npm ci
+    - name: Build
+      shell: bash
+      run: |
+        npm run build
+    - name: Test
+      shell: bash
+      run: |
+        npm test

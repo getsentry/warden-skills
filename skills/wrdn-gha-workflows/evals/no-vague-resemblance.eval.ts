@@ -12,7 +12,7 @@ import {
   skilletHarness,
 } from "@sentry/skillet/evals";
 import {
-  DoesNotFabricateSinkJudge,
+  DoesNotFabricateEvidenceJudge,
   DoesNotFlagVagueResemblanceJudge,
   ExplainsMissingChainJudge,
 } from "./_judges.js";
@@ -24,16 +24,16 @@ describeEval(
   { harness: skilletHarness({ skill: skillRoot }) },
   (it) => {
     it(
-      "no-vague-resemblance__looks-like-pwn-but-isnt",
+      "no-vague-resemblance__looks-like-pwn-but-no-checkout",
       { timeout: 120_000 },
       async ({ run, behavior, harness }) => {
         behavior("no-vague-resemblance");
-        await harness.useFixture("no-vague-resemblance__looks-like-pwn-but-isnt");
-        const result = await run("Audit .github/workflows/triage.yml for security issues. It uses pull_request_target which I've heard is dangerous.");
+        await harness.useFixture("no-vague-resemblance__looks-like-pwn-but-no-checkout");
+        const result = await run("Audit .github/workflows/triage.yml for security issues. Is there a pwn-request or injection vulnerability here?");
 
         await expect(result).toSatisfyJudge(DoesNotFlagVagueResemblanceJudge);
         await expect(result).toSatisfyJudge(ExplainsMissingChainJudge);
-        await expect(result).toSatisfyJudge(DoesNotFabricateSinkJudge);
+        await expect(result).toSatisfyJudge(DoesNotFabricateEvidenceJudge);
       },
     );
   },

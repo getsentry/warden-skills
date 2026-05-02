@@ -13,10 +13,10 @@ import {
 } from "@sentry/skillet/evals";
 import {
   ConnectsExploitChainJudge,
-  IdentifiesCommentBodyInjectionJudge,
-  IdentifiesCommentTriggerJudge,
-  IdentifiesMissingAuthGateJudge,
+  IdentifiesCommentInjectionSinkJudge,
+  IdentifiesPrivilegedTriggerJudge,
   RatesHighSeverityJudge,
+  RecommendsAuthorizationGateJudge,
 } from "./_judges.js";
 
 const skillRoot = dirname(fileURLToPath(import.meta.url)).replace(/\/evals$/, "");
@@ -26,18 +26,18 @@ describeEval(
   { harness: skilletHarness({ skill: skillRoot }) },
   (it) => {
     it(
-      "report-comment-chatops__issue-comment-no-auth-gate",
+      "report-comment-chatops__issue-comment-shell-injection",
       { timeout: 120_000 },
       async ({ run, behavior, harness }) => {
         behavior("report-comment-chatops");
-        await harness.useFixture("report-comment-chatops__issue-comment-no-auth-gate");
-        const result = await run("Please security-audit .github/workflows/chatops.yml and report any vulnerabilities you find.");
+        await harness.useFixture("report-comment-chatops__issue-comment-shell-injection");
+        const result = await run("Audit .github/workflows/chatops.yml for security issues.");
 
-        await expect(result).toSatisfyJudge(IdentifiesCommentTriggerJudge);
-        await expect(result).toSatisfyJudge(IdentifiesMissingAuthGateJudge);
-        await expect(result).toSatisfyJudge(IdentifiesCommentBodyInjectionJudge);
-        await expect(result).toSatisfyJudge(RatesHighSeverityJudge);
+        await expect(result).toSatisfyJudge(IdentifiesPrivilegedTriggerJudge);
+        await expect(result).toSatisfyJudge(IdentifiesCommentInjectionSinkJudge);
         await expect(result).toSatisfyJudge(ConnectsExploitChainJudge);
+        await expect(result).toSatisfyJudge(RatesHighSeverityJudge);
+        await expect(result).toSatisfyJudge(RecommendsAuthorizationGateJudge);
       },
     );
 
@@ -47,12 +47,12 @@ describeEval(
       async ({ run, behavior, harness }) => {
         behavior("report-comment-chatops");
         await harness.useFixture("report-comment-chatops__discussion-title-injection");
-        const result = await run("Audit .github/workflows/discussion.yml for security problems.");
+        const result = await run("Review .github/workflows/discussion.yml — anything risky?");
 
-        await expect(result).toSatisfyJudge(IdentifiesCommentTriggerJudge);
-        await expect(result).toSatisfyJudge(IdentifiesCommentBodyInjectionJudge);
-        await expect(result).toSatisfyJudge(RatesHighSeverityJudge);
+        await expect(result).toSatisfyJudge(IdentifiesPrivilegedTriggerJudge);
+        await expect(result).toSatisfyJudge(IdentifiesCommentInjectionSinkJudge);
         await expect(result).toSatisfyJudge(ConnectsExploitChainJudge);
+        await expect(result).toSatisfyJudge(RatesHighSeverityJudge);
       },
     );
   },

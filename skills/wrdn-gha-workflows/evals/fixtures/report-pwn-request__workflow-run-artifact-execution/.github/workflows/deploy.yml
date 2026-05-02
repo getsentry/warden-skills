@@ -1,20 +1,18 @@
 name: Deploy
 on:
   workflow_run:
-    workflows: [Build]
+    workflows: ["CI"]
     types: [completed]
-permissions:
-  contents: write
-  id-token: write
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/checkout@v4
         with:
-          name: dist
-          run-id: ${{ github.event.workflow_run.id }}
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-      - run: node dist/index.js
+          ref: ${{ github.event.workflow_run.head_sha }}
+      - run: pip install -e .
+      - run: python -m mypackage.deploy
         env:
-          DEPLOY_KEY: ${{ secrets.DEPLOY_KEY }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}

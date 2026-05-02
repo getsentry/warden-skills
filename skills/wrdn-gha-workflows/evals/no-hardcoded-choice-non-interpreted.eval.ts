@@ -12,7 +12,7 @@ import {
   skilletHarness,
 } from "@sentry/skillet/evals";
 import {
-  DoesNotFlagHardcodedChoiceJudge,
+  DoesNotFlagSafeChoiceInputJudge,
   ExplainsSafeChoiceInputJudge,
 } from "./_judges.js";
 
@@ -28,9 +28,9 @@ describeEval(
       async ({ run, behavior, harness }) => {
         behavior("no-hardcoded-choice-non-interpreted");
         await harness.useFixture("no-hardcoded-choice-non-interpreted__choice-in-if-and-with");
-        const result = await run("Audit .github/workflows/deploy.yml for security issues. Is the environment input here a vulnerability?");
+        const result = await run("Audit .github/workflows/deploy.yml for security issues. Are the manual inputs safe?");
 
-        await expect(result).toSatisfyJudge(DoesNotFlagHardcodedChoiceJudge);
+        await expect(result).toSatisfyJudge(DoesNotFlagSafeChoiceInputJudge);
         await expect(result).toSatisfyJudge(ExplainsSafeChoiceInputJudge);
       },
     );

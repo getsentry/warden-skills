@@ -1,0 +1,8 @@
+name: run-tests
+runs:
+  using: composite
+  steps:
+    - shell: bash
+      run: |
+        npm ci
+        npm test

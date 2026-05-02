@@ -12,6 +12,7 @@ import {
   skilletHarness,
 } from "@sentry/skillet/evals";
 import {
+  DoesNotFabricateEvidenceJudge,
   DoesNotFlagDispatchWithoutSinkJudge,
   ExplainsNoExploitablePathJudge,
 } from "./_judges.js";
@@ -23,28 +24,29 @@ describeEval(
   { harness: skilletHarness({ skill: skillRoot }) },
   (it) => {
     it(
-      "no-dispatch-without-sink__manual-echo-only",
+      "no-dispatch-without-sink__manual-deploy-no-inputs",
       { timeout: 120_000 },
       async ({ run, behavior, harness }) => {
         behavior("no-dispatch-without-sink");
-        await harness.useFixture("no-dispatch-without-sink__manual-echo-only");
-        const result = await run("Audit .github/workflows/release.yml for security issues.");
+        await harness.useFixture("no-dispatch-without-sink__manual-deploy-no-inputs");
+        const result = await run("Audit .github/workflows/deploy.yml for security issues.");
 
         await expect(result).toSatisfyJudge(DoesNotFlagDispatchWithoutSinkJudge);
         await expect(result).toSatisfyJudge(ExplainsNoExploitablePathJudge);
+        await expect(result).toSatisfyJudge(DoesNotFabricateEvidenceJudge);
       },
     );
 
     it(
-      "no-dispatch-without-sink__schedule-no-input",
+      "no-dispatch-without-sink__nightly-schedule-no-sink",
       { timeout: 120_000 },
       async ({ run, behavior, harness }) => {
         behavior("no-dispatch-without-sink");
-        await harness.useFixture("no-dispatch-without-sink__schedule-no-input");
-        const result = await run("Is .github/workflows/nightly.yml exploitable?");
+        await harness.useFixture("no-dispatch-without-sink__nightly-schedule-no-sink");
+        const result = await run("Is there anything risky in this scheduled workflow?");
 
         await expect(result).toSatisfyJudge(DoesNotFlagDispatchWithoutSinkJudge);
-        await expect(result).toSatisfyJudge(ExplainsNoExploitablePathJudge);
+        await expect(result).toSatisfyJudge(DoesNotFabricateEvidenceJudge);
       },
     );
   },

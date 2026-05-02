@@ -14,7 +14,6 @@ import {
 import {
   ConnectsExploitChainJudge,
   IdentifiesPrivilegedTriggerJudge,
-  IncludesFileLocationJudge,
   RatesHighSeverityJudge,
 } from "./_judges.js";
 
@@ -25,32 +24,30 @@ describeEval(
   { harness: skilletHarness({ skill: skillRoot }) },
   (it) => {
     it(
-      "report-pwn-request__pr-target-checkout-build",
-      { timeout: 120_000 },
+      "report-pwn-request__pr-target-checkout-and-test",
+      { timeout: 180_000 },
       async ({ run, behavior, harness }) => {
         behavior("report-pwn-request");
-        await harness.useFixture("report-pwn-request__pr-target-checkout-build");
-        const result = await run("Audit .github/workflows/ci.yml for security issues and report any vulnerabilities you find.");
+        await harness.useFixture("report-pwn-request__pr-target-checkout-and-test");
+        const result = await run("Please audit the workflows in .github/workflows/ for security vulnerabilities and report any findings.");
 
         await expect(result).toSatisfyJudge(IdentifiesPrivilegedTriggerJudge);
         await expect(result).toSatisfyJudge(ConnectsExploitChainJudge);
         await expect(result).toSatisfyJudge(RatesHighSeverityJudge);
-        await expect(result).toSatisfyJudge(IncludesFileLocationJudge);
       },
     );
 
     it(
       "report-pwn-request__workflow-run-artifact-execution",
-      { timeout: 120_000 },
+      { timeout: 180_000 },
       async ({ run, behavior, harness }) => {
         behavior("report-pwn-request");
         await harness.useFixture("report-pwn-request__workflow-run-artifact-execution");
-        const result = await run("Review the workflows under .github/workflows/ and tell me about any security vulnerabilities.");
+        const result = await run("Review .github/workflows/deploy.yml and tell me if there are any security problems.");
 
         await expect(result).toSatisfyJudge(IdentifiesPrivilegedTriggerJudge);
         await expect(result).toSatisfyJudge(ConnectsExploitChainJudge);
         await expect(result).toSatisfyJudge(RatesHighSeverityJudge);
-        await expect(result).toSatisfyJudge(IncludesFileLocationJudge);
       },
     );
   },

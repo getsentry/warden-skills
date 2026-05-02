@@ -12,10 +12,9 @@ import {
   skilletHarness,
 } from "@sentry/skillet/evals";
 import {
+  DoesNotFabricateEvidenceJudge,
   DoesNotFlagBarePullRequestJudge,
   ExplainsBarePullRequestSafeJudge,
-  IdentifiesArtifactHandoffJudge,
-  RatesHighSeverityJudge,
 } from "./_judges.js";
 
 const skillRoot = dirname(fileURLToPath(import.meta.url)).replace(/\/evals$/, "");
@@ -25,28 +24,16 @@ describeEval(
   { harness: skilletHarness({ skill: skillRoot }) },
   (it) => {
     it(
-      "no-bare-pull-request__plain-test-workflow",
+      "no-bare-pull-request__plain-pr-build-test",
       { timeout: 120_000 },
       async ({ run, behavior, harness }) => {
         behavior("no-bare-pull-request");
-        await harness.useFixture("no-bare-pull-request__plain-test-workflow");
-        const result = await run("Audit .github/workflows/test.yml for security issues.");
+        await harness.useFixture("no-bare-pull-request__plain-pr-build-test");
+        const result = await run("Audit .github/workflows/ci.yml for security issues. Is there anything risky here?");
 
         await expect(result).toSatisfyJudge(DoesNotFlagBarePullRequestJudge);
         await expect(result).toSatisfyJudge(ExplainsBarePullRequestSafeJudge);
-      },
-    );
-
-    it(
-      "no-bare-pull-request__artifact-handoff-to-workflow-run",
-      { timeout: 180_000 },
-      async ({ run, behavior, harness }) => {
-        behavior("no-bare-pull-request");
-        await harness.useFixture("no-bare-pull-request__artifact-handoff-to-workflow-run");
-        const result = await run("Audit the workflows in .github/workflows/ for security issues.");
-
-        await expect(result).toSatisfyJudge(IdentifiesArtifactHandoffJudge);
-        await expect(result).toSatisfyJudge(RatesHighSeverityJudge);
+        await expect(result).toSatisfyJudge(DoesNotFabricateEvidenceJudge);
       },
     );
   },

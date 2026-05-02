@@ -5,11 +5,9 @@ on:
 jobs:
   process:
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
     steps:
-      - name: Greet
+      - name: Log title
         run: |
           echo "New discussion: ${{ github.event.discussion.title }}"
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

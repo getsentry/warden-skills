@@ -14,6 +14,7 @@ import {
 import {
   IdentifiesScriptInjectionJudge,
   IncludesFixCodeJudge,
+  RatesHighSeverityJudge,
   RecommendsEnvWithQuotingJudge,
 } from "./_judges.js";
 
@@ -24,16 +25,17 @@ describeEval(
   { harness: skilletHarness({ skill: skillRoot }) },
   (it) => {
     it(
-      "recommend-remediations__env-quoting-for-pr-body",
+      "recommend-remediations__pr-title-injection-env-quote",
       { timeout: 120_000 },
       async ({ run, behavior, harness }) => {
         behavior("recommend-remediations");
-        await harness.useFixture("recommend-remediations__env-quoting-for-pr-body");
-        const result = await run("Audit .github/workflows/triage.yml and tell me how to fix any injection issues. Show the corrected code.");
+        await harness.useFixture("recommend-remediations__pr-title-injection-env-quote");
+        const result = await run("Audit .github/workflows/triage.yml and report any security issues with concrete fixes.");
 
         await expect(result).toSatisfyJudge(IdentifiesScriptInjectionJudge);
         await expect(result).toSatisfyJudge(RecommendsEnvWithQuotingJudge);
         await expect(result).toSatisfyJudge(IncludesFixCodeJudge);
+        await expect(result).toSatisfyJudge(RatesHighSeverityJudge);
       },
     );
   },
