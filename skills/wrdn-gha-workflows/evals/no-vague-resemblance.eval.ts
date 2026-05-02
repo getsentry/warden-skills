@@ -12,9 +12,9 @@ import {
   skilletHarness,
 } from "@sentry/skillet/evals";
 import {
-  DoesNotRecommendSpeculativeFixJudge,
+  DoesNotFabricateSinkJudge,
+  DoesNotFlagVagueResemblanceJudge,
   ExplainsMissingChainJudge,
-  RecognizesNoVagueResemblanceJudge,
 } from "./_judges.js";
 
 const skillRoot = dirname(fileURLToPath(import.meta.url)).replace(/\/evals$/, "");
@@ -24,16 +24,16 @@ describeEval(
   { harness: skilletHarness({ skill: skillRoot }) },
   (it) => {
     it(
-      "no-vague-resemblance__looks-like-injection-but-isnt",
+      "no-vague-resemblance__looks-like-pwn-but-isnt",
       { timeout: 120_000 },
       async ({ run, behavior, harness }) => {
         behavior("no-vague-resemblance");
-        await harness.useFixture("no-vague-resemblance__looks-like-injection-but-isnt");
-        const result = await run("Audit .github/workflows/notify.yml for security vulnerabilities. I'm worried because it uses ${{ }} expressions in a run step and that looks like the injection patterns I've seen.");
+        await harness.useFixture("no-vague-resemblance__looks-like-pwn-but-isnt");
+        const result = await run("Audit .github/workflows/triage.yml for security issues. It uses pull_request_target which I've heard is dangerous.");
 
-        await expect(result).toSatisfyJudge(RecognizesNoVagueResemblanceJudge);
+        await expect(result).toSatisfyJudge(DoesNotFlagVagueResemblanceJudge);
         await expect(result).toSatisfyJudge(ExplainsMissingChainJudge);
-        await expect(result).toSatisfyJudge(DoesNotRecommendSpeculativeFixJudge);
+        await expect(result).toSatisfyJudge(DoesNotFabricateSinkJudge);
       },
     );
   },

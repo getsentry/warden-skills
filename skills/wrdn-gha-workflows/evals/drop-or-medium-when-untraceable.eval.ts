@@ -36,5 +36,19 @@ describeEval(
         await expect(result).toSatisfyJudge(DoesNotFabricateChainJudge);
       },
     );
+
+    it(
+      "drop-or-medium-when-untraceable__missing-script",
+      { timeout: 120_000 },
+      async ({ run, behavior, harness }) => {
+        behavior("drop-or-medium-when-untraceable");
+        await harness.useFixture("drop-or-medium-when-untraceable__missing-script");
+        const result = await run("Review this workflow for vulnerabilities. Provide severity and confidence for any findings.");
+
+        await expect(result).toSatisfyJudge(DropsOrRatesMediumJudge);
+        await expect(result).toSatisfyJudge(IdentifiesMissingLinkJudge);
+        await expect(result).toSatisfyJudge(DoesNotFabricateChainJudge);
+      },
+    );
   },
 );

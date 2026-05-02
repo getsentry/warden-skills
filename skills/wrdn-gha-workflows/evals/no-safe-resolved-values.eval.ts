@@ -12,8 +12,8 @@ import {
   skilletHarness,
 } from "@sentry/skillet/evals";
 import {
+  DoesNotFlagSafeResolvedValueJudge,
   ExplainsSafeResolvedValueJudge,
-  RecognizesNoIssueOnSafeResolvedValueJudge,
 } from "./_judges.js";
 
 const skillRoot = dirname(fileURLToPath(import.meta.url)).replace(/\/evals$/, "");
@@ -28,9 +28,9 @@ describeEval(
       async ({ run, behavior, harness }) => {
         behavior("no-safe-resolved-values");
         await harness.useFixture("no-safe-resolved-values__pr-number-in-run");
-        const result = await run("Audit .github/workflows/comment.yml — is the run step using ${{ github.event.pull_request.number }} a script injection risk?");
+        const result = await run("Is there a script injection risk in this workflow where ${{ github.event.pull_request.number }} is used inside the run: shell command? Audit .github/workflows/comment.yml.");
 
-        await expect(result).toSatisfyJudge(RecognizesNoIssueOnSafeResolvedValueJudge);
+        await expect(result).toSatisfyJudge(DoesNotFlagSafeResolvedValueJudge);
         await expect(result).toSatisfyJudge(ExplainsSafeResolvedValueJudge);
       },
     );
@@ -41,9 +41,9 @@ describeEval(
       async ({ run, behavior, harness }) => {
         behavior("no-safe-resolved-values");
         await harness.useFixture("no-safe-resolved-values__full-sha-in-run");
-        const result = await run("Is there an injection risk in this workflow's run step that echoes ${{ github.event.pull_request.head.sha }}?");
+        const result = await run("Audit .github/workflows/build.yml — is using ${{ github.event.pull_request.head.sha }} directly in a run: command a code-injection sink?");
 
-        await expect(result).toSatisfyJudge(RecognizesNoIssueOnSafeResolvedValueJudge);
+        await expect(result).toSatisfyJudge(DoesNotFlagSafeResolvedValueJudge);
         await expect(result).toSatisfyJudge(ExplainsSafeResolvedValueJudge);
       },
     );

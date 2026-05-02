@@ -12,10 +12,10 @@ import {
   skilletHarness,
 } from "@sentry/skillet/evals";
 import {
-  ConnectsUntrustedInputToSinkJudge,
-  FollowsUsesIntoCalleeJudge,
+  ConnectsExploitChainJudge,
   IdentifiesPrivilegedTriggerJudge,
-  RatesHighSeverityJudge,
+  IdentifiesTrustBoundaryJudge,
+  TracesAcrossCalleesJudge,
 } from "./_judges.js";
 
 const skillRoot = dirname(fileURLToPath(import.meta.url)).replace(/\/evals$/, "");
@@ -25,17 +25,17 @@ describeEval(
   { harness: skilletHarness({ skill: skillRoot }) },
   (it) => {
     it(
-      "trace-execution-graph__composite-action-sink",
+      "trace-execution-graph__composite-callee-chain",
       { timeout: 180_000 },
       async ({ run, behavior, harness }) => {
         behavior("trace-execution-graph");
-        await harness.useFixture("trace-execution-graph__composite-action-sink");
-        const result = await run("Audit the workflows and any local actions in this repo for security issues. Trace any exploit chains end-to-end.");
+        await harness.useFixture("trace-execution-graph__composite-callee-chain");
+        const result = await run("Please audit this repository's GitHub Actions for security vulnerabilities. Look at .github/workflows/ and any actions referenced. Report any exploitable findings with the full chain.");
 
         await expect(result).toSatisfyJudge(IdentifiesPrivilegedTriggerJudge);
-        await expect(result).toSatisfyJudge(FollowsUsesIntoCalleeJudge);
-        await expect(result).toSatisfyJudge(ConnectsUntrustedInputToSinkJudge);
-        await expect(result).toSatisfyJudge(RatesHighSeverityJudge);
+        await expect(result).toSatisfyJudge(IdentifiesTrustBoundaryJudge);
+        await expect(result).toSatisfyJudge(TracesAcrossCalleesJudge);
+        await expect(result).toSatisfyJudge(ConnectsExploitChainJudge);
       },
     );
   },

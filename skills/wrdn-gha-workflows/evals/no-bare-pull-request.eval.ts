@@ -12,9 +12,10 @@ import {
   skilletHarness,
 } from "@sentry/skillet/evals";
 import {
-  DoesNotRecommendPwnRequestMitigationsJudge,
-  ExplainsReadOnlyContextJudge,
-  RecognizesNoBarePullRequestRiskJudge,
+  DoesNotFlagBarePullRequestJudge,
+  ExplainsBarePullRequestSafeJudge,
+  IdentifiesArtifactHandoffJudge,
+  RatesHighSeverityJudge,
 } from "./_judges.js";
 
 const skillRoot = dirname(fileURLToPath(import.meta.url)).replace(/\/evals$/, "");
@@ -24,16 +25,28 @@ describeEval(
   { harness: skilletHarness({ skill: skillRoot }) },
   (it) => {
     it(
-      "no-bare-pull-request__plain-pr-build-test",
+      "no-bare-pull-request__plain-test-workflow",
       { timeout: 120_000 },
       async ({ run, behavior, harness }) => {
         behavior("no-bare-pull-request");
-        await harness.useFixture("no-bare-pull-request__plain-pr-build-test");
-        const result = await run("Audit .github/workflows/ci.yml for security issues. Is this workflow vulnerable to anything?");
+        await harness.useFixture("no-bare-pull-request__plain-test-workflow");
+        const result = await run("Audit .github/workflows/test.yml for security issues.");
 
-        await expect(result).toSatisfyJudge(RecognizesNoBarePullRequestRiskJudge);
-        await expect(result).toSatisfyJudge(ExplainsReadOnlyContextJudge);
-        await expect(result).toSatisfyJudge(DoesNotRecommendPwnRequestMitigationsJudge);
+        await expect(result).toSatisfyJudge(DoesNotFlagBarePullRequestJudge);
+        await expect(result).toSatisfyJudge(ExplainsBarePullRequestSafeJudge);
+      },
+    );
+
+    it(
+      "no-bare-pull-request__artifact-handoff-to-workflow-run",
+      { timeout: 180_000 },
+      async ({ run, behavior, harness }) => {
+        behavior("no-bare-pull-request");
+        await harness.useFixture("no-bare-pull-request__artifact-handoff-to-workflow-run");
+        const result = await run("Audit the workflows in .github/workflows/ for security issues.");
+
+        await expect(result).toSatisfyJudge(IdentifiesArtifactHandoffJudge);
+        await expect(result).toSatisfyJudge(RatesHighSeverityJudge);
       },
     );
   },

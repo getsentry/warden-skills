@@ -12,9 +12,8 @@ import {
   skilletHarness,
 } from "@sentry/skillet/evals";
 import {
-  DoesNotRecommendQuotingFixJudge,
+  DoesNotFlagNonInterpretingExpressionJudge,
   ExplainsNonInterpretingContextJudge,
-  RecognizesNoNonInterpretingExpressionJudge,
 } from "./_judges.js";
 
 const skillRoot = dirname(fileURLToPath(import.meta.url)).replace(/\/evals$/, "");
@@ -24,28 +23,28 @@ describeEval(
   { harness: skilletHarness({ skill: skillRoot }) },
   (it) => {
     it(
-      "no-non-interpreting-expressions__if-condition",
+      "no-non-interpreting-expressions__if-condition-title",
       { timeout: 120_000 },
       async ({ run, behavior, harness }) => {
         behavior("no-non-interpreting-expressions");
-        await harness.useFixture("no-non-interpreting-expressions__if-condition");
-        const result = await run("Audit .github/workflows/ci.yml — is there an injection issue with the PR title used in the if: condition?");
+        await harness.useFixture("no-non-interpreting-expressions__if-condition-title");
+        const result = await run("Audit .github/workflows/triage.yml — is the use of github.event.pull_request.title in the if: condition a script injection risk?");
 
-        await expect(result).toSatisfyJudge(RecognizesNoNonInterpretingExpressionJudge);
+        await expect(result).toSatisfyJudge(DoesNotFlagNonInterpretingExpressionJudge);
         await expect(result).toSatisfyJudge(ExplainsNonInterpretingContextJudge);
       },
     );
 
     it(
-      "no-non-interpreting-expressions__env-quoted-safely",
+      "no-non-interpreting-expressions__env-quoted-in-with",
       { timeout: 120_000 },
       async ({ run, behavior, harness }) => {
         behavior("no-non-interpreting-expressions");
-        await harness.useFixture("no-non-interpreting-expressions__env-quoted-safely");
-        const result = await run("Review .github/workflows/build.yml. The PR title flows into env: — is that an RCE?");
+        await harness.useFixture("no-non-interpreting-expressions__env-quoted-in-with");
+        const result = await run("Review .github/workflows/build.yml. The PR title flows into env: and a with: input — anything exploitable here?");
 
-        await expect(result).toSatisfyJudge(RecognizesNoNonInterpretingExpressionJudge);
-        await expect(result).toSatisfyJudge(DoesNotRecommendQuotingFixJudge);
+        await expect(result).toSatisfyJudge(DoesNotFlagNonInterpretingExpressionJudge);
+        await expect(result).toSatisfyJudge(ExplainsNonInterpretingContextJudge);
       },
     );
   },

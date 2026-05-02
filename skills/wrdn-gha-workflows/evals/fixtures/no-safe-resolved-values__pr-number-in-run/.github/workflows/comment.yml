@@ -3,10 +3,14 @@ on:
   pull_request_target:
     types: [opened]
 jobs:
-  comment:
+  greet:
     runs-on: ubuntu-latest
     permissions:
       pull-requests: write
     steps:
-      - name: Log PR number
-        run: echo "Processing PR #${{ github.event.pull_request.number }}"
+      - name: Post comment
+        run: |
+          echo "PR number is ${{ github.event.pull_request.number }}"
+          gh pr comment ${{ github.event.pull_request.number }} --body "thanks"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

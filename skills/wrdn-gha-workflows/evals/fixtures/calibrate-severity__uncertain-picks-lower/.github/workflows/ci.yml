@@ -1,0 +1,14 @@
+name: CI
+on:
+  pull_request_target:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - run: ./scripts/maybe-run-tests.sh

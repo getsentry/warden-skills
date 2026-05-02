@@ -1,0 +1,10 @@
+name: Build and Publish
+description: Builds and publishes the package
+runs:
+  using: composite
+  steps:
+    - shell: bash
+      run: |
+        npm ci
+        npm run build
+        npm publish

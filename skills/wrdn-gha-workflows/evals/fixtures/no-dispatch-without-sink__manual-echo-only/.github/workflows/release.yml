@@ -1,0 +1,16 @@
+name: Manual Release
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version tag'
+        required: true
+        type: string
+jobs:
+  print:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Show version
+        env:
+          VERSION: ${{ inputs.version }}
+        run: echo "Releasing $VERSION"

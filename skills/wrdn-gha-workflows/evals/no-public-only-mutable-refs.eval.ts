@@ -13,8 +13,8 @@ import {
 } from "@sentry/skillet/evals";
 import {
   DoesNotFlagFirstPartyTagJudge,
+  DoesNotFlagMutableRefJudge,
   ExplainsLowImpactContextJudge,
-  RecognizesNoMutableRefRiskJudge,
 } from "./_judges.js";
 
 const skillRoot = dirname(fileURLToPath(import.meta.url)).replace(/\/evals$/, "");
@@ -24,14 +24,14 @@ describeEval(
   { harness: skilletHarness({ skill: skillRoot }) },
   (it) => {
     it(
-      "no-public-only-mutable-refs__public-lint-third-party",
+      "no-public-only-mutable-refs__public-readonly-third-party",
       { timeout: 120_000 },
       async ({ run, behavior, harness }) => {
         behavior("no-public-only-mutable-refs");
-        await harness.useFixture("no-public-only-mutable-refs__public-lint-third-party");
-        const result = await run("Please audit .github/workflows/lint.yml for security issues.");
+        await harness.useFixture("no-public-only-mutable-refs__public-readonly-third-party");
+        const result = await run("Audit .github/workflows/lint.yml for security issues.");
 
-        await expect(result).toSatisfyJudge(RecognizesNoMutableRefRiskJudge);
+        await expect(result).toSatisfyJudge(DoesNotFlagMutableRefJudge);
         await expect(result).toSatisfyJudge(DoesNotFlagFirstPartyTagJudge);
         await expect(result).toSatisfyJudge(ExplainsLowImpactContextJudge);
       },

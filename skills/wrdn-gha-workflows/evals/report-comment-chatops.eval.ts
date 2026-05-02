@@ -12,10 +12,11 @@ import {
   skilletHarness,
 } from "@sentry/skillet/evals";
 import {
-  ConnectsCommentInjectionChainJudge,
+  ConnectsExploitChainJudge,
+  IdentifiesCommentBodyInjectionJudge,
+  IdentifiesCommentTriggerJudge,
   IdentifiesMissingAuthGateJudge,
   RatesHighSeverityJudge,
-  RecognizesGatedChatopsJudge,
 } from "./_judges.js";
 
 const skillRoot = dirname(fileURLToPath(import.meta.url)).replace(/\/evals$/, "");
@@ -25,41 +26,33 @@ describeEval(
   { harness: skilletHarness({ skill: skillRoot }) },
   (it) => {
     it(
+      "report-comment-chatops__issue-comment-no-auth-gate",
+      { timeout: 120_000 },
+      async ({ run, behavior, harness }) => {
+        behavior("report-comment-chatops");
+        await harness.useFixture("report-comment-chatops__issue-comment-no-auth-gate");
+        const result = await run("Please security-audit .github/workflows/chatops.yml and report any vulnerabilities you find.");
+
+        await expect(result).toSatisfyJudge(IdentifiesCommentTriggerJudge);
+        await expect(result).toSatisfyJudge(IdentifiesMissingAuthGateJudge);
+        await expect(result).toSatisfyJudge(IdentifiesCommentBodyInjectionJudge);
+        await expect(result).toSatisfyJudge(RatesHighSeverityJudge);
+        await expect(result).toSatisfyJudge(ConnectsExploitChainJudge);
+      },
+    );
+
+    it(
       "report-comment-chatops__discussion-title-injection",
       { timeout: 120_000 },
       async ({ run, behavior, harness }) => {
         behavior("report-comment-chatops");
         await harness.useFixture("report-comment-chatops__discussion-title-injection");
-        const result = await run("Audit .github/workflows/discussion.yml for security issues.");
+        const result = await run("Audit .github/workflows/discussion.yml for security problems.");
 
-        await expect(result).toSatisfyJudge(ConnectsCommentInjectionChainJudge);
+        await expect(result).toSatisfyJudge(IdentifiesCommentTriggerJudge);
+        await expect(result).toSatisfyJudge(IdentifiesCommentBodyInjectionJudge);
         await expect(result).toSatisfyJudge(RatesHighSeverityJudge);
-      },
-    );
-
-    it(
-      "report-comment-chatops__issue-comment-no-auth",
-      { timeout: 120_000 },
-      async ({ run, behavior, harness }) => {
-        behavior("report-comment-chatops");
-        await harness.useFixture("report-comment-chatops__issue-comment-no-auth");
-        const result = await run("Review .github/workflows/chatops.yml — is this safe?");
-
-        await expect(result).toSatisfyJudge(IdentifiesMissingAuthGateJudge);
-        await expect(result).toSatisfyJudge(ConnectsCommentInjectionChainJudge);
-        await expect(result).toSatisfyJudge(RatesHighSeverityJudge);
-      },
-    );
-
-    it(
-      "report-comment-chatops__gated-chatops-negative",
-      { timeout: 120_000 },
-      async ({ run, behavior, harness }) => {
-        behavior("report-comment-chatops");
-        await harness.useFixture("report-comment-chatops__gated-chatops-negative");
-        const result = await run("Look at .github/workflows/gated.yml and tell me if the chatops authorization is sufficient.");
-
-        await expect(result).toSatisfyJudge(RecognizesGatedChatopsJudge);
+        await expect(result).toSatisfyJudge(ConnectsExploitChainJudge);
       },
     );
   },

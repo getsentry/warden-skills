@@ -1,0 +1,12 @@
+name: CI
+on:
+  pull_request:
+jobs:
+  test:
+    runs-on: [self-hosted, linux, production]
+    steps:
+      - uses: actions/checkout@v4
+      - run: npm ci && npm test
+      - run: ./scripts/integration.sh
+        env:
+          API_KEY: ${{ secrets.PROD_API_KEY }}

@@ -1,0 +1,8 @@
+name: PR Checks
+on:
+  pull_request_target:
+    types: [opened, synchronize]
+jobs:
+  call-checks:
+    uses: ./.github/workflows/reusable-checks.yml
+    secrets: inherit

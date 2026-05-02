@@ -12,10 +12,10 @@ import {
   skilletHarness,
 } from "@sentry/skillet/evals";
 import {
-  ConnectsCallerCalleeChainJudge,
-  IdentifiesCalleeSinkJudge,
+  ConnectsExploitChainJudge,
+  DoesNotFlagYamlStyleJudge,
+  IdentifiesUnsafeCalleeJudge,
   RatesHighSeverityJudge,
-  RecommendsCalleeHardeningJudge,
 } from "./_judges.js";
 
 const skillRoot = dirname(fileURLToPath(import.meta.url)).replace(/\/evals$/, "");
@@ -25,31 +25,32 @@ describeEval(
   { harness: skilletHarness({ skill: skillRoot }) },
   (it) => {
     it(
-      "report-unsafe-reusable-and-local__reusable-callee-unquoted-input",
+      "report-unsafe-reusable-and-local__reusable-callee-runs-pr-title",
       { timeout: 180_000 },
       async ({ run, behavior, harness }) => {
         behavior("report-unsafe-reusable-and-local");
-        await harness.useFixture("report-unsafe-reusable-and-local__reusable-callee-unquoted-input");
-        const result = await run("Audit the workflows under .github/workflows/ for security issues. Look at both the caller and any reusable workflows it invokes.");
+        await harness.useFixture("report-unsafe-reusable-and-local__reusable-callee-runs-pr-title");
+        const result = await run("Please audit these workflows for security issues. The caller looks fine but I want a thorough review of the whole chain.");
 
-        await expect(result).toSatisfyJudge(IdentifiesCalleeSinkJudge);
-        await expect(result).toSatisfyJudge(ConnectsCallerCalleeChainJudge);
+        await expect(result).toSatisfyJudge(IdentifiesUnsafeCalleeJudge);
+        await expect(result).toSatisfyJudge(ConnectsExploitChainJudge);
         await expect(result).toSatisfyJudge(RatesHighSeverityJudge);
-        await expect(result).toSatisfyJudge(RecommendsCalleeHardeningJudge);
+        await expect(result).toSatisfyJudge(DoesNotFlagYamlStyleJudge);
       },
     );
 
     it(
-      "report-unsafe-reusable-and-local__composite-action-from-pr-checkout",
+      "report-unsafe-reusable-and-local__local-action-from-pr-checkout",
       { timeout: 180_000 },
       async ({ run, behavior, harness }) => {
         behavior("report-unsafe-reusable-and-local");
-        await harness.useFixture("report-unsafe-reusable-and-local__composite-action-from-pr-checkout");
-        const result = await run("Review .github/workflows/ci.yml and any local actions it uses for security issues.");
+        await harness.useFixture("report-unsafe-reusable-and-local__local-action-from-pr-checkout");
+        const result = await run("Review this workflow and the local action it uses. Is there anything risky about how they interact?");
 
-        await expect(result).toSatisfyJudge(IdentifiesCalleeSinkJudge);
-        await expect(result).toSatisfyJudge(ConnectsCallerCalleeChainJudge);
+        await expect(result).toSatisfyJudge(IdentifiesUnsafeCalleeJudge);
+        await expect(result).toSatisfyJudge(ConnectsExploitChainJudge);
         await expect(result).toSatisfyJudge(RatesHighSeverityJudge);
+        await expect(result).toSatisfyJudge(DoesNotFlagYamlStyleJudge);
       },
     );
   },

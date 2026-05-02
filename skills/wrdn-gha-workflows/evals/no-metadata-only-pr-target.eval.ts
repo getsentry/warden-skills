@@ -12,9 +12,8 @@ import {
   skilletHarness,
 } from "@sentry/skillet/evals";
 import {
-  DoesNotFabricateSinkJudge,
-  ExplainsNoCheckoutOrExecutionJudge,
-  RecognizesNoMetadataOnlyPwnRequestJudge,
+  DoesNotFlagMetadataOnlyPrTargetJudge,
+  ExplainsNoCheckoutOrCodeExecutionJudge,
 } from "./_judges.js";
 
 const skillRoot = dirname(fileURLToPath(import.meta.url)).replace(/\/evals$/, "");
@@ -24,16 +23,15 @@ describeEval(
   { harness: skilletHarness({ skill: skillRoot }) },
   (it) => {
     it(
-      "no-metadata-only-pr-target__labeler",
+      "no-metadata-only-pr-target__auto-label",
       { timeout: 120_000 },
       async ({ run, behavior, harness }) => {
         behavior("no-metadata-only-pr-target");
-        await harness.useFixture("no-metadata-only-pr-target__labeler");
-        const result = await run("Please audit .github/workflows/labeler.yml for any security issues with this pull_request_target workflow.");
+        await harness.useFixture("no-metadata-only-pr-target__auto-label");
+        const result = await run("Please audit .github/workflows/label.yml for security issues and tell me if there's anything to worry about.");
 
-        await expect(result).toSatisfyJudge(RecognizesNoMetadataOnlyPwnRequestJudge);
-        await expect(result).toSatisfyJudge(ExplainsNoCheckoutOrExecutionJudge);
-        await expect(result).toSatisfyJudge(DoesNotFabricateSinkJudge);
+        await expect(result).toSatisfyJudge(DoesNotFlagMetadataOnlyPrTargetJudge);
+        await expect(result).toSatisfyJudge(ExplainsNoCheckoutOrCodeExecutionJudge);
       },
     );
 
@@ -43,11 +41,10 @@ describeEval(
       async ({ run, behavior, harness }) => {
         behavior("no-metadata-only-pr-target");
         await harness.useFixture("no-metadata-only-pr-target__welcome-comment");
-        const result = await run("Is there any pwn-request risk in this workflow? Audit .github/workflows/welcome.yml.");
+        const result = await run("Is there a pwn-request risk in .github/workflows/welcome.yml?");
 
-        await expect(result).toSatisfyJudge(RecognizesNoMetadataOnlyPwnRequestJudge);
-        await expect(result).toSatisfyJudge(ExplainsNoCheckoutOrExecutionJudge);
-        await expect(result).toSatisfyJudge(DoesNotFabricateSinkJudge);
+        await expect(result).toSatisfyJudge(DoesNotFlagMetadataOnlyPrTargetJudge);
+        await expect(result).toSatisfyJudge(ExplainsNoCheckoutOrCodeExecutionJudge);
       },
     );
   },

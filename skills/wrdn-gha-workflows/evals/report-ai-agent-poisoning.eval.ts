@@ -12,9 +12,10 @@ import {
   skilletHarness,
 } from "@sentry/skillet/evals";
 import {
-  ConnectsPrivilegedAgentExecutionJudge,
-  IdentifiesAgentPoisoningJudge,
+  ConnectsExploitChainJudge,
+  IdentifiesAIAgentPoisoningJudge,
   RatesHighSeverityJudge,
+  RecommendsAgentPoisoningHardeningJudge,
 } from "./_judges.js";
 
 const skillRoot = dirname(fileURLToPath(import.meta.url)).replace(/\/evals$/, "");
@@ -29,11 +30,12 @@ describeEval(
       async ({ run, behavior, harness }) => {
         behavior("report-ai-agent-poisoning");
         await harness.useFixture("report-ai-agent-poisoning__claude-md-on-pr-target");
-        const result = await run("Audit .github/workflows/ai-review.yml — anything risky about how we run our AI reviewer?");
+        const result = await run("Please audit .github/workflows/claude-review.yml for security issues.");
 
-        await expect(result).toSatisfyJudge(IdentifiesAgentPoisoningJudge);
-        await expect(result).toSatisfyJudge(ConnectsPrivilegedAgentExecutionJudge);
+        await expect(result).toSatisfyJudge(IdentifiesAIAgentPoisoningJudge);
+        await expect(result).toSatisfyJudge(ConnectsExploitChainJudge);
         await expect(result).toSatisfyJudge(RatesHighSeverityJudge);
+        await expect(result).toSatisfyJudge(RecommendsAgentPoisoningHardeningJudge);
       },
     );
   },

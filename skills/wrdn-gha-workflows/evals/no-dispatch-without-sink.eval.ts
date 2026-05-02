@@ -12,9 +12,8 @@ import {
   skilletHarness,
 } from "@sentry/skillet/evals";
 import {
-  DoesNotRecommendSinkHardeningJudge,
+  DoesNotFlagDispatchWithoutSinkJudge,
   ExplainsNoExploitablePathJudge,
-  RecognizesNoDispatchSinkJudge,
 } from "./_judges.js";
 
 const skillRoot = dirname(fileURLToPath(import.meta.url)).replace(/\/evals$/, "");
@@ -24,16 +23,15 @@ describeEval(
   { harness: skilletHarness({ skill: skillRoot }) },
   (it) => {
     it(
-      "no-dispatch-without-sink__dispatch-choice-echo",
+      "no-dispatch-without-sink__manual-echo-only",
       { timeout: 120_000 },
       async ({ run, behavior, harness }) => {
         behavior("no-dispatch-without-sink");
-        await harness.useFixture("no-dispatch-without-sink__dispatch-choice-echo");
-        const result = await run("Audit .github/workflows/release.yml — is there any injection or RCE risk here?");
+        await harness.useFixture("no-dispatch-without-sink__manual-echo-only");
+        const result = await run("Audit .github/workflows/release.yml for security issues.");
 
-        await expect(result).toSatisfyJudge(RecognizesNoDispatchSinkJudge);
+        await expect(result).toSatisfyJudge(DoesNotFlagDispatchWithoutSinkJudge);
         await expect(result).toSatisfyJudge(ExplainsNoExploitablePathJudge);
-        await expect(result).toSatisfyJudge(DoesNotRecommendSinkHardeningJudge);
       },
     );
 
@@ -43,11 +41,10 @@ describeEval(
       async ({ run, behavior, harness }) => {
         behavior("no-dispatch-without-sink");
         await harness.useFixture("no-dispatch-without-sink__schedule-no-input");
-        const result = await run("Review .github/workflows/nightly.yml for security issues.");
+        const result = await run("Is .github/workflows/nightly.yml exploitable?");
 
-        await expect(result).toSatisfyJudge(RecognizesNoDispatchSinkJudge);
+        await expect(result).toSatisfyJudge(DoesNotFlagDispatchWithoutSinkJudge);
         await expect(result).toSatisfyJudge(ExplainsNoExploitablePathJudge);
-        await expect(result).toSatisfyJudge(DoesNotRecommendSinkHardeningJudge);
       },
     );
   },

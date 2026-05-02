@@ -1,0 +1,15 @@
+name: Build
+on:
+  pull_request_target:
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Set branch env
+        run: |
+          echo "BRANCH=${{ github.head_ref }}" >> $GITHUB_ENV
+      - name: Build
+        run: |
+          make build BRANCH="$BRANCH"
+        env:
+          DEPLOY_KEY: ${{ secrets.DEPLOY_KEY }}

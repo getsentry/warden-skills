@@ -4,7 +4,7 @@ on:
     types: [opened, synchronize]
 jobs:
   call-build:
-    uses: ./.github/workflows/build.yml
+    uses: ./.github/workflows/build-and-test.yml
     secrets: inherit
     with:
       pr_ref: ${{ github.event.pull_request.head.sha }}

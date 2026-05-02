@@ -12,9 +12,10 @@ import {
   skilletHarness,
 } from "@sentry/skillet/evals";
 import {
-  ExplainsUncertaintyWhenDowngradingJudge,
-  JustifiesSeverityByImpactJudge,
+  ExplainsSeverityRationaleJudge,
+  PicksLowerWhenUncertainJudge,
   RatesHighSeverityJudge,
+  RatesLowSeverityJudge,
   RatesMediumSeverityJudge,
 } from "./_judges.js";
 
@@ -25,41 +26,54 @@ describeEval(
   { harness: skilletHarness({ skill: skillRoot }) },
   (it) => {
     it(
-      "calibrate-severity__high-pwn-request-rce",
+      "calibrate-severity__high-pwn-request-publish",
       { timeout: 120_000 },
       async ({ run, behavior, harness }) => {
         behavior("calibrate-severity");
-        await harness.useFixture("calibrate-severity__high-pwn-request-rce");
-        const result = await run("Audit .github/workflows/ci.yml and tell me the severity of any issue you find, with justification.");
+        await harness.useFixture("calibrate-severity__high-pwn-request-publish");
+        const result = await run("Audit .github/workflows/release.yml and tell me the severity with reasoning.");
 
         await expect(result).toSatisfyJudge(RatesHighSeverityJudge);
-        await expect(result).toSatisfyJudge(JustifiesSeverityByImpactJudge);
+        await expect(result).toSatisfyJudge(ExplainsSeverityRationaleJudge);
       },
     );
 
     it(
-      "calibrate-severity__medium-mutable-action-with-secrets",
+      "calibrate-severity__medium-mutable-action-with-token",
       { timeout: 120_000 },
       async ({ run, behavior, harness }) => {
         behavior("calibrate-severity");
-        await harness.useFixture("calibrate-severity__medium-mutable-action-with-secrets");
-        const result = await run("Review .github/workflows/deploy.yml and rate the severity of any issue, explaining why.");
+        await harness.useFixture("calibrate-severity__medium-mutable-action-with-token");
+        const result = await run("Review .github/workflows/build.yml and assign a severity with reasoning.");
 
         await expect(result).toSatisfyJudge(RatesMediumSeverityJudge);
-        await expect(result).toSatisfyJudge(JustifiesSeverityByImpactJudge);
+        await expect(result).toSatisfyJudge(ExplainsSeverityRationaleJudge);
       },
     );
 
     it(
-      "calibrate-severity__medium-manual-approval-gate",
+      "calibrate-severity__low-defense-in-depth-adjacent",
       { timeout: 120_000 },
       async ({ run, behavior, harness }) => {
         behavior("calibrate-severity");
-        await harness.useFixture("calibrate-severity__medium-manual-approval-gate");
-        const result = await run("What's the severity of any issue in .github/workflows/release.yml? Justify your call.");
+        await harness.useFixture("calibrate-severity__low-defense-in-depth-adjacent");
+        const result = await run("Audit .github/workflows/release.yml. There's a real high-severity pwn-request issue here, but also note any defense-in-depth hardening adjacent to it and rate that hardening item separately.");
 
-        await expect(result).toSatisfyJudge(RatesMediumSeverityJudge);
-        await expect(result).toSatisfyJudge(ExplainsUncertaintyWhenDowngradingJudge);
+        await expect(result).toSatisfyJudge(RatesLowSeverityJudge);
+        await expect(result).toSatisfyJudge(ExplainsSeverityRationaleJudge);
+      },
+    );
+
+    it(
+      "calibrate-severity__uncertain-picks-lower",
+      { timeout: 120_000 },
+      async ({ run, behavior, harness }) => {
+        behavior("calibrate-severity");
+        await harness.useFixture("calibrate-severity__uncertain-picks-lower");
+        const result = await run("Audit .github/workflows/ci.yml. If you're unsure whether the chain is fully exploitable, pick the lower severity and explain why.");
+
+        await expect(result).toSatisfyJudge(PicksLowerWhenUncertainJudge);
+        await expect(result).toSatisfyJudge(ExplainsSeverityRationaleJudge);
       },
     );
   },

@@ -12,9 +12,9 @@ import {
   skilletHarness,
 } from "@sentry/skillet/evals";
 import {
-  ConcreteMinimalPatchJudge,
-  RecommendsEnvAndQuotingJudge,
-  RecommendsPinnedSHAJudge,
+  IdentifiesScriptInjectionJudge,
+  IncludesFixCodeJudge,
+  RecommendsEnvWithQuotingJudge,
 } from "./_judges.js";
 
 const skillRoot = dirname(fileURLToPath(import.meta.url)).replace(/\/evals$/, "");
@@ -24,16 +24,16 @@ describeEval(
   { harness: skilletHarness({ skill: skillRoot }) },
   (it) => {
     it(
-      "recommend-remediations__env-quoting-and-sha-pin",
+      "recommend-remediations__env-quoting-for-pr-body",
       { timeout: 120_000 },
       async ({ run, behavior, harness }) => {
         behavior("recommend-remediations");
-        await harness.useFixture("recommend-remediations__env-quoting-and-sha-pin");
-        const result = await run("Audit .github/workflows/triage.yml and tell me how to fix any issues you find.");
+        await harness.useFixture("recommend-remediations__env-quoting-for-pr-body");
+        const result = await run("Audit .github/workflows/triage.yml and tell me how to fix any injection issues. Show the corrected code.");
 
-        await expect(result).toSatisfyJudge(RecommendsEnvAndQuotingJudge);
-        await expect(result).toSatisfyJudge(RecommendsPinnedSHAJudge);
-        await expect(result).toSatisfyJudge(ConcreteMinimalPatchJudge);
+        await expect(result).toSatisfyJudge(IdentifiesScriptInjectionJudge);
+        await expect(result).toSatisfyJudge(RecommendsEnvWithQuotingJudge);
+        await expect(result).toSatisfyJudge(IncludesFixCodeJudge);
       },
     );
   },

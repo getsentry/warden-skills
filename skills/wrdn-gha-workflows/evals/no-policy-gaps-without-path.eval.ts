@@ -12,8 +12,8 @@ import {
   skilletHarness,
 } from "@sentry/skillet/evals";
 import {
-  DoesNotFlagPolicyGapsJudge,
-  RecognizesNoExploitablePathJudge,
+  DoesNotFlagPolicyGapJudge,
+  ScopesReviewToWorkflowJudge,
 } from "./_judges.js";
 
 const skillRoot = dirname(fileURLToPath(import.meta.url)).replace(/\/evals$/, "");
@@ -23,15 +23,15 @@ describeEval(
   { harness: skilletHarness({ skill: skillRoot }) },
   (it) => {
     it(
-      "no-policy-gaps-without-path__benign-ci-no-codeowners",
+      "no-policy-gaps-without-path__safe-ci",
       { timeout: 120_000 },
       async ({ run, behavior, harness }) => {
         behavior("no-policy-gaps-without-path");
-        await harness.useFixture("no-policy-gaps-without-path__benign-ci-no-codeowners");
-        const result = await run("Audit .github/workflows/ci.yml for security issues. Note there is no CODEOWNERS file and main branch has no required reviewers configured.");
+        await harness.useFixture("no-policy-gaps-without-path__safe-ci");
+        const result = await run("Please audit .github/workflows/ci.yml for security issues.");
 
-        await expect(result).toSatisfyJudge(DoesNotFlagPolicyGapsJudge);
-        await expect(result).toSatisfyJudge(RecognizesNoExploitablePathJudge);
+        await expect(result).toSatisfyJudge(DoesNotFlagPolicyGapJudge);
+        await expect(result).toSatisfyJudge(ScopesReviewToWorkflowJudge);
       },
     );
   },

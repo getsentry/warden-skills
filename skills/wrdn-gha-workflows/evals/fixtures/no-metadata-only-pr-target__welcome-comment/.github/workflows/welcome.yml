@@ -3,20 +3,19 @@ on:
   pull_request_target:
     types: [opened]
 
-permissions:
-  pull-requests: write
-
 jobs:
   greet:
     runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
     steps:
       - name: Post welcome comment
         uses: actions/github-script@v7
         with:
           script: |
-            github.rest.issues.createComment({
-              issue_number: context.payload.pull_request.number,
+            await github.rest.issues.createComment({
               owner: context.repo.owner,
               repo: context.repo.repo,
-              body: 'Thanks for the PR!'
-            })
+              issue_number: context.payload.pull_request.number,
+              body: 'Thanks for your contribution! A maintainer will review shortly.'
+            });

@@ -12,10 +12,11 @@ import {
   skilletHarness,
 } from "@sentry/skillet/evals";
 import {
-  RecognizesNoChoiceInputRceJudge,
-  RecognizesNoMaintainerApprovalAsPinJudge,
-  RecognizesNoPersistCredentialsFalseSavesJudge,
-  RecognizesNoPwnRequestOnBaseCheckoutJudge,
+  DistinguishesPersistCredentialsScopeJudge,
+  DistinguishesPullRequestTargetCheckoutJudge,
+  DoesNotFlagBarePullRequestJudge,
+  DoesNotFlagChoiceInputJudge,
+  ExplainsFalsePositiveTrapJudge,
 } from "./_judges.js";
 
 const skillRoot = dirname(fileURLToPath(import.meta.url)).replace(/\/evals$/, "");
@@ -25,50 +26,53 @@ describeEval(
   { harness: skilletHarness({ skill: skillRoot }) },
   (it) => {
     it(
-      "apply-false-positive-controls__base-checkout-under-pr-target",
+      "apply-false-positive-controls__pr-target-default-checkout",
       { timeout: 120_000 },
       async ({ run, behavior, harness }) => {
         behavior("apply-false-positive-controls");
-        await harness.useFixture("apply-false-positive-controls__base-checkout-under-pr-target");
-        const result = await run("Audit .github/workflows/label.yml. Is this a pwn-request vulnerability?");
+        await harness.useFixture("apply-false-positive-controls__pr-target-default-checkout");
+        const result = await run("Audit .github/workflows/label.yml. Is the checkout here a pwn-request?");
 
-        await expect(result).toSatisfyJudge(RecognizesNoPwnRequestOnBaseCheckoutJudge);
+        await expect(result).toSatisfyJudge(DistinguishesPullRequestTargetCheckoutJudge);
+        await expect(result).toSatisfyJudge(ExplainsFalsePositiveTrapJudge);
       },
     );
 
     it(
-      "apply-false-positive-controls__persist-credentials-false-not-savior",
+      "apply-false-positive-controls__choice-input-shell",
       { timeout: 120_000 },
       async ({ run, behavior, harness }) => {
         behavior("apply-false-positive-controls");
-        await harness.useFixture("apply-false-positive-controls__persist-credentials-false-not-savior");
-        const result = await run("Someone says persist-credentials: false makes this workflow safe. Audit .github/workflows/build.yml.");
+        await harness.useFixture("apply-false-positive-controls__choice-input-shell");
+        const result = await run("Is this workflow_dispatch with a choice input vulnerable to command injection?");
 
-        await expect(result).toSatisfyJudge(RecognizesNoPersistCredentialsFalseSavesJudge);
+        await expect(result).toSatisfyJudge(DoesNotFlagChoiceInputJudge);
+        await expect(result).toSatisfyJudge(ExplainsFalsePositiveTrapJudge);
       },
     );
 
     it(
-      "apply-false-positive-controls__hardcoded-choice-input-safe",
+      "apply-false-positive-controls__persist-credentials-scope",
       { timeout: 120_000 },
       async ({ run, behavior, harness }) => {
         behavior("apply-false-positive-controls");
-        await harness.useFixture("apply-false-positive-controls__hardcoded-choice-input-safe");
-        const result = await run("Audit .github/workflows/deploy.yml — is the choice input an RCE?");
+        await harness.useFixture("apply-false-positive-controls__persist-credentials-scope");
+        const result = await run("We set persist-credentials: false on checkout. Does that mean our NPM_TOKEN env is also safe in the test step?");
 
-        await expect(result).toSatisfyJudge(RecognizesNoChoiceInputRceJudge);
+        await expect(result).toSatisfyJudge(DistinguishesPersistCredentialsScopeJudge);
       },
     );
 
     it(
-      "apply-false-positive-controls__approval-not-sha-pin",
+      "apply-false-positive-controls__bare-pull-request-no-secrets",
       { timeout: 120_000 },
       async ({ run, behavior, harness }) => {
         behavior("apply-false-positive-controls");
-        await harness.useFixture("apply-false-positive-controls__approval-not-sha-pin");
-        const result = await run("We require maintainer approval via a protected environment before this workflow runs. Does that make the third-party action reference safe? Audit .github/workflows/release.yml.");
+        await harness.useFixture("apply-false-positive-controls__bare-pull-request-no-secrets");
+        const result = await run("Is this CI workflow a pwn-request risk?");
 
-        await expect(result).toSatisfyJudge(RecognizesNoMaintainerApprovalAsPinJudge);
+        await expect(result).toSatisfyJudge(DoesNotFlagBarePullRequestJudge);
+        await expect(result).toSatisfyJudge(ExplainsFalsePositiveTrapJudge);
       },
     );
   },

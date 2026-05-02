@@ -13,8 +13,8 @@ import {
 } from "@sentry/skillet/evals";
 import {
   ConnectsExploitChainJudge,
-  IdentifiesPRControlledCheckoutJudge,
   IdentifiesPrivilegedTriggerJudge,
+  IncludesFileLocationJudge,
   RatesHighSeverityJudge,
 } from "./_judges.js";
 
@@ -25,32 +25,32 @@ describeEval(
   { harness: skilletHarness({ skill: skillRoot }) },
   (it) => {
     it(
-      "report-pwn-request__pr-target-checkout-head",
+      "report-pwn-request__pr-target-checkout-build",
       { timeout: 120_000 },
       async ({ run, behavior, harness }) => {
         behavior("report-pwn-request");
-        await harness.useFixture("report-pwn-request__pr-target-checkout-head");
-        const result = await run("Audit .github/workflows/ci.yml for security issues.");
+        await harness.useFixture("report-pwn-request__pr-target-checkout-build");
+        const result = await run("Audit .github/workflows/ci.yml for security issues and report any vulnerabilities you find.");
 
         await expect(result).toSatisfyJudge(IdentifiesPrivilegedTriggerJudge);
-        await expect(result).toSatisfyJudge(IdentifiesPRControlledCheckoutJudge);
         await expect(result).toSatisfyJudge(ConnectsExploitChainJudge);
         await expect(result).toSatisfyJudge(RatesHighSeverityJudge);
+        await expect(result).toSatisfyJudge(IncludesFileLocationJudge);
       },
     );
 
     it(
-      "report-pwn-request__workflow-run-artifact-exec",
+      "report-pwn-request__workflow-run-artifact-execution",
       { timeout: 120_000 },
       async ({ run, behavior, harness }) => {
         behavior("report-pwn-request");
-        await harness.useFixture("report-pwn-request__workflow-run-artifact-exec");
-        const result = await run("Review .github/workflows/deploy.yml — anything dangerous?");
+        await harness.useFixture("report-pwn-request__workflow-run-artifact-execution");
+        const result = await run("Review the workflows under .github/workflows/ and tell me about any security vulnerabilities.");
 
         await expect(result).toSatisfyJudge(IdentifiesPrivilegedTriggerJudge);
-        await expect(result).toSatisfyJudge(IdentifiesPRControlledCheckoutJudge);
         await expect(result).toSatisfyJudge(ConnectsExploitChainJudge);
         await expect(result).toSatisfyJudge(RatesHighSeverityJudge);
+        await expect(result).toSatisfyJudge(IncludesFileLocationJudge);
       },
     );
   },

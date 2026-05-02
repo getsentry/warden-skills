@@ -12,10 +12,9 @@ import {
   skilletHarness,
 } from "@sentry/skillet/evals";
 import {
-  ConnectsPersistCredentialsJudge,
+  ConnectsExploitChainJudge,
   IdentifiesCredentialExposureJudge,
-  RatesCredentialExposureSeverityJudge,
-  RecommendsCredentialExposureFixJudge,
+  RatesHighSeverityJudge,
 } from "./_judges.js";
 
 const skillRoot = dirname(fileURLToPath(import.meta.url)).replace(/\/evals$/, "");
@@ -25,17 +24,30 @@ describeEval(
   { harness: skilletHarness({ skill: skillRoot }) },
   (it) => {
     it(
-      "report-credential-exposure__artipacked-git-upload",
+      "report-credential-exposure__artipacked-upload",
       { timeout: 120_000 },
       async ({ run, behavior, harness }) => {
         behavior("report-credential-exposure");
-        await harness.useFixture("report-credential-exposure__artipacked-git-upload");
-        const result = await run("Please audit .github/workflows/release.yml for security issues and report any credential exposure risks.");
+        await harness.useFixture("report-credential-exposure__artipacked-upload");
+        const result = await run("Audit .github/workflows/release.yml for security issues.");
 
         await expect(result).toSatisfyJudge(IdentifiesCredentialExposureJudge);
-        await expect(result).toSatisfyJudge(ConnectsPersistCredentialsJudge);
-        await expect(result).toSatisfyJudge(RatesCredentialExposureSeverityJudge);
-        await expect(result).toSatisfyJudge(RecommendsCredentialExposureFixJudge);
+        await expect(result).toSatisfyJudge(ConnectsExploitChainJudge);
+        await expect(result).toSatisfyJudge(RatesHighSeverityJudge);
+      },
+    );
+
+    it(
+      "report-credential-exposure__persisted-checkout-creds",
+      { timeout: 120_000 },
+      async ({ run, behavior, harness }) => {
+        behavior("report-credential-exposure");
+        await harness.useFixture("report-credential-exposure__persisted-checkout-creds");
+        const result = await run("Review .github/workflows/test.yml — anything risky about how it handles credentials?");
+
+        await expect(result).toSatisfyJudge(IdentifiesCredentialExposureJudge);
+        await expect(result).toSatisfyJudge(ConnectsExploitChainJudge);
+        await expect(result).toSatisfyJudge(RatesHighSeverityJudge);
       },
     );
   },

@@ -12,10 +12,11 @@ import {
   skilletHarness,
 } from "@sentry/skillet/evals";
 import {
-  DistinguishesDispatchFromExternalJudge,
+  ConnectsPrivilegeDeltaJudge,
+  DistinguishesCallerPrivilegeJudge,
   IdentifiesEntryPointJudge,
-  RatesPrivilegeDeltaJudge,
-  RecognizesNoPrivilegeDeltaJudge,
+  RatesHighSeverityJudge,
+  RatesLowOrInformationalJudge,
 } from "./_judges.js";
 
 const skillRoot = dirname(fileURLToPath(import.meta.url)).replace(/\/evals$/, "");
@@ -25,29 +26,30 @@ describeEval(
   { harness: skilletHarness({ skill: skillRoot }) },
   (it) => {
     it(
-      "state-entry-point__dispatch-with-publish-secrets",
-      { timeout: 120_000 },
-      async ({ run, behavior, harness }) => {
-        behavior("state-entry-point");
-        await harness.useFixture("state-entry-point__dispatch-with-publish-secrets");
-        const result = await run("Audit .github/workflows/release.yml and report any security findings. For each finding, be explicit about the entry point and severity.");
-
-        await expect(result).toSatisfyJudge(IdentifiesEntryPointJudge);
-        await expect(result).toSatisfyJudge(RatesPrivilegeDeltaJudge);
-        await expect(result).toSatisfyJudge(DistinguishesDispatchFromExternalJudge);
-      },
-    );
-
-    it(
       "state-entry-point__dispatch-no-privilege-delta",
       { timeout: 120_000 },
       async ({ run, behavior, harness }) => {
         behavior("state-entry-point");
         await harness.useFixture("state-entry-point__dispatch-no-privilege-delta");
-        const result = await run("Review .github/workflows/dev-helper.yml. Note the entry point and only report caller-controlled RCE if there is a real privilege delta.");
+        const result = await run("Audit .github/workflows/build.yml. For any finding, tell me the entry point and severity.");
 
-        await expect(result).toSatisfyJudge(RecognizesNoPrivilegeDeltaJudge);
-        await expect(result).toSatisfyJudge(DistinguishesDispatchFromExternalJudge);
+        await expect(result).toSatisfyJudge(IdentifiesEntryPointJudge);
+        await expect(result).toSatisfyJudge(DistinguishesCallerPrivilegeJudge);
+        await expect(result).toSatisfyJudge(RatesLowOrInformationalJudge);
+      },
+    );
+
+    it(
+      "state-entry-point__dispatch-with-publish-secrets",
+      { timeout: 120_000 },
+      async ({ run, behavior, harness }) => {
+        behavior("state-entry-point");
+        await harness.useFixture("state-entry-point__dispatch-with-publish-secrets");
+        const result = await run("Review .github/workflows/release.yml and tell me the entry point and severity for any finding.");
+
+        await expect(result).toSatisfyJudge(IdentifiesEntryPointJudge);
+        await expect(result).toSatisfyJudge(ConnectsPrivilegeDeltaJudge);
+        await expect(result).toSatisfyJudge(RatesHighSeverityJudge);
       },
     );
   },

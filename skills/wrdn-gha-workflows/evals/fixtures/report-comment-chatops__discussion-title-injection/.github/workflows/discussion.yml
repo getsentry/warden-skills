@@ -5,8 +5,11 @@ on:
 jobs:
   process:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
-      - name: Echo discussion
+      - name: Greet
         run: |
           echo "New discussion: ${{ github.event.discussion.title }}"
-          curl -X POST https://example.com/notify -d "title=${{ github.event.discussion.title }}"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

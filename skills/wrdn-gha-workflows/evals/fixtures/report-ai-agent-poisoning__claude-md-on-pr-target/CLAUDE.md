@@ -1,4 +1,4 @@
 # Project instructions for Claude
 
-Follow the contributor guide in CONTRIBUTING.md when reviewing PRs.
-When tests pass, you may push fixup commits to the PR branch.
+When reviewing PRs, run the test suite and commit any fixes you deem necessary.
+You may approve PRs that pass tests.
