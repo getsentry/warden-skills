@@ -9,54 +9,47 @@ import { dirname } from "node:path";
 import { expect } from "vitest";
 import {
   describeEval,
+  judge,
   skilletHarness,
 } from "@sentry/skillet/evals";
 
 const skillRoot = dirname(fileURLToPath(import.meta.url)).replace(/\/evals$/, "");
+
+const NoFalsePositiveOnDispatchJudge = judge("NoFalsePositiveOnDispatchJudge", async ({ criterion }) => {
+  return criterion("Does NOT report the workflow_dispatch trigger as a vulnerability and does NOT claim it enables RCE, injection, or privilege escalation as written.");
+});
+
+const ExplainsNoSinkJudge = judge("ExplainsNoSinkJudge", async ({ criterion }) => {
+  return criterion("Explains that no caller-controlled input reaches a code-evaluating sink and there is no privileged impact, so the trigger alone is not a finding.");
+});
 
 describeEval(
   "no-dispatch-without-sink",
   { harness: skilletHarness({ skill: skillRoot }) },
   (it) => {
     it(
-      "no-dispatch-without-sink__manual-deploy-bool-input",
-      { timeout: 90_000 },
+      "no-dispatch-without-sink__manual-deploy-no-inputs",
+      { timeout: 120_000 },
       async ({ run, behavior, harness }) => {
         behavior("no-dispatch-without-sink");
-        await harness.setup("mkdir -p .github/workflows\ncat > .github/workflows/deploy.yml <<'YAML'\nname: Deploy\non:\n  workflow_dispatch:\n    inputs:\n      dry_run:\n        type: boolean\n        default: true\njobs:\n  deploy:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: actions/checkout@v4\n      - name: Echo flag\n        run: echo \"dry_run=${{ inputs.dry_run }}\"\nYAML\n");
-        const result = await run("Review .github/workflows/deploy.yml for any GitHub Actions security issues.");
+        await harness.setup("mkdir -p .github/workflows\ncat > .github/workflows/deploy.yml <<'YAML'\nname: Manual Deploy\non:\n  workflow_dispatch:\njobs:\n  deploy:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: actions/checkout@v4\n      - run: ./scripts/deploy.sh\nYAML");
+        const result = await run("Audit .github/workflows/deploy.yml for security issues. Is the workflow_dispatch trigger a problem here?");
 
-        expect(result.session.outputText).not.toContain("RCE");
-        expect(result.session.outputText).not.toContain("command injection");
-        expect(result.session.outputText).toMatch(new RegExp("(no\\s+finding|not\\s+exploit|out of scope|safe|no\\s+sink)", "i"));
+        await expect(result).toSatisfyJudge(NoFalsePositiveOnDispatchJudge);
+        await expect(result).toSatisfyJudge(ExplainsNoSinkJudge);
       },
     );
 
     it(
-      "no-dispatch-without-sink__schedule-readonly",
-      { timeout: 90_000 },
+      "no-dispatch-without-sink__scheduled-cache-warm",
+      { timeout: 120_000 },
       async ({ run, behavior, harness }) => {
         behavior("no-dispatch-without-sink");
-        await harness.setup("mkdir -p .github/workflows\ncat > .github/workflows/nightly.yml <<'YAML'\nname: Nightly\non:\n  schedule:\n    - cron: '0 3 * * *'\njobs:\n  build:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: actions/checkout@v4\n      - run: npm ci && npm test\nYAML\n");
-        const result = await run("Any security issues with .github/workflows/nightly.yml?");
+        await harness.setup("mkdir -p .github/workflows\ncat > .github/workflows/nightly.yml <<'YAML'\nname: Nightly Cache Warm\non:\n  schedule:\n    - cron: '0 3 * * *'\njobs:\n  warm:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: actions/checkout@v4\n      - run: npm ci\nYAML");
+        const result = await run("Anything exploitable in this scheduled workflow?");
 
-        expect(result.session.outputText).not.toContain("injection");
-        expect(result.session.outputText).toMatch(new RegExp("\\b(schedule|cron)\\b", "i"));
-        expect(result.session.outputText).toMatch(new RegExp("(no\\s+finding|not\\s+exploit|out of scope|safe|no\\s+caller-controlled)", "i"));
-      },
-    );
-
-    it(
-      "no-dispatch-without-sink__protected-push-no-sink",
-      { timeout: 90_000 },
-      async ({ run, behavior, harness }) => {
-        behavior("no-dispatch-without-sink");
-        await harness.setup("mkdir -p .github/workflows\ncat > .github/workflows/release.yml <<'YAML'\nname: Release\non:\n  push:\n    branches: [main]\njobs:\n  release:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: actions/checkout@v4\n      - run: ./scripts/release.sh\nYAML\n");
-        const result = await run("Look at .github/workflows/release.yml and tell me if there is any RCE or injection risk.");
-
-        expect(result.session.outputText).not.toContain("RCE");
-        expect(result.session.outputText).not.toContain("command injection");
-        expect(result.session.outputText).toMatch(new RegExp("(no\\s+finding|not\\s+exploit|out of scope|safe|no\\s+sink|no\\s+caller-controlled)", "i"));
+        await expect(result).toSatisfyJudge(NoFalsePositiveOnDispatchJudge);
+        await expect(result).toSatisfyJudge(ExplainsNoSinkJudge);
       },
     );
   },

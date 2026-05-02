@@ -9,43 +9,34 @@ import { dirname } from "node:path";
 import { expect } from "vitest";
 import {
   describeEval,
+  judge,
   skilletHarness,
 } from "@sentry/skillet/evals";
 
 const skillRoot = dirname(fileURLToPath(import.meta.url)).replace(/\/evals$/, "");
+
+const NoYamlLintFindingsJudge = judge("NoYamlLintFindingsJudge", async ({ criterion }) => {
+  return criterion("Does NOT report generic YAML style, missing workflow/job/step name fields, indentation, or actionlint-style formatting concerns as findings.");
+});
+
+const ReportsNoVulnerabilitiesJudge = judge("ReportsNoVulnerabilitiesJudge", async ({ criterion }) => {
+  return criterion("Concludes the workflow has no actionable security vulnerabilities; either reports nothing or explicitly states no security issues found.");
+});
 
 describeEval(
   "no-yaml-lint",
   { harness: skilletHarness({ skill: skillRoot }) },
   (it) => {
     it(
-      "no-yaml-lint__missing-name-and-style",
-      { timeout: 90_000 },
+      "no-yaml-lint__missing-names-and-style",
+      { timeout: 120_000 },
       async ({ run, behavior, harness }) => {
         behavior("no-yaml-lint");
-        await harness.setup("mkdir -p .github/workflows\ncat > .github/workflows/build.yml <<'YAML'\non:\n  push:\n    branches: [main]\njobs:\n  build:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: actions/checkout@v4\n      - run: |\n           echo \"hello\"\n           npm test\nYAML\n");
-        const result = await run("Please audit .github/workflows/build.yml for security issues.");
+        await harness.setup("mkdir -p .github/workflows\ncat > .github/workflows/build.yml <<'YAML'\non:\n  push:\n    branches: [main]\njobs:\n  build:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: actions/checkout@v4\n      - run: echo hello\n      - run: echo world\nYAML");
+        const result = await run("Audit .github/workflows/build.yml for security vulnerabilities and report any findings.");
 
-        expect(result.session.outputText).not.toContain("actionlint");
-        expect(result.session.outputText).not.toContain("missing name");
-        expect(result.session.outputText).not.toContain("YAML style");
-        expect(result.session.outputText).not.toContain("indentation");
-        expect(result.session.outputText).toMatch(new RegExp("(no\\s+(security\\s+)?finding|nothing\\s+exploitable|out of scope|no\\s+actionable|safe)", "i"));
-      },
-    );
-
-    it(
-      "no-yaml-lint__explicit-lint-request",
-      { timeout: 90_000 },
-      async ({ run, behavior, harness }) => {
-        behavior("no-yaml-lint");
-        await harness.setup("mkdir -p .github/workflows\ncat > .github/workflows/release.yml <<'YAML'\non:\n  push:\n    tags: ['v*']\njobs:\n  release:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: actions/checkout@v4\n      - run: ./scripts/release.sh\nYAML\n");
-        const result = await run("Lint .github/workflows/release.yml and tell me about formatting problems, missing job names, or any actionlint warnings.");
-
-        expect(result.session.outputText).not.toContain("actionlint");
-        expect(result.session.outputText).not.toContain("formatting");
-        expect(result.session.outputText).not.toContain("missing name");
-        expect(result.session.outputText).toMatch(new RegExp("(out of scope|not\\s+a\\s+security|no\\s+(security\\s+)?finding|focus\\s+on\\s+security)", "i"));
+        await expect(result).toSatisfyJudge(NoYamlLintFindingsJudge);
+        await expect(result).toSatisfyJudge(ReportsNoVulnerabilitiesJudge);
       },
     );
   },

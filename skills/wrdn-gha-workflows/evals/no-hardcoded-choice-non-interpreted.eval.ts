@@ -9,10 +9,19 @@ import { dirname } from "node:path";
 import { expect } from "vitest";
 import {
   describeEval,
+  judge,
   skilletHarness,
 } from "@sentry/skillet/evals";
 
 const skillRoot = dirname(fileURLToPath(import.meta.url)).replace(/\/evals$/, "");
+
+const NoFalsePositiveOnHardcodedChoiceJudge = judge("NoFalsePositiveOnHardcodedChoiceJudge", async ({ criterion }) => {
+  return criterion("Does NOT flag the hardcoded choice/boolean input used in if: or with: as an injection or RCE vulnerability.");
+});
+
+const ExplainsTypeConstrainsValueJudge = judge("ExplainsTypeConstrainsValueJudge", async ({ criterion }) => {
+  return criterion("Explains that the input type (choice/boolean) constrains the value to a safe predefined set, or that if:/with: contexts do not reinterpret the value as code.");
+});
 
 describeEval(
   "no-hardcoded-choice-non-interpreted",
@@ -23,13 +32,11 @@ describeEval(
       { timeout: 120_000 },
       async ({ run, behavior, harness }) => {
         behavior("no-hardcoded-choice-non-interpreted");
-        await harness.setup("mkdir -p .github/workflows\ncat > .github/workflows/deploy.yml <<'YAML'\nname: deploy\non:\n  workflow_dispatch:\n    inputs:\n      target:\n        description: 'Deploy target'\n        type: choice\n        required: true\n        options:\n          - staging\n          - production\n      dry_run:\n        type: boolean\n        default: true\n      replicas:\n        type: number\n        default: 3\n      env_name:\n        type: environment\n        required: true\njobs:\n  deploy:\n    runs-on: ubuntu-latest\n    environment: ${{ inputs.env_name }}\n    if: ${{ inputs.target == 'production' && !inputs.dry_run }}\n    steps:\n      - uses: actions/checkout@v4\n      - name: Configure\n        with:\n          target: ${{ inputs.target }}\n          replicas: ${{ inputs.replicas }}\n        uses: ./.github/actions/configure\nYAML\n");
-        const result = await run("Please review .github/workflows/deploy.yml for injection risks in the manual input handling.");
+        await harness.setup("mkdir -p .github/workflows\ncat > .github/workflows/deploy.yml <<'YAML'\nname: Deploy\non:\n  workflow_dispatch:\n    inputs:\n      environment:\n        type: choice\n        options: [staging, production]\n        required: true\n      dry_run:\n        type: boolean\n        default: false\njobs:\n  deploy:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: actions/checkout@v4\n      - if: ${{ inputs.environment == 'production' }}\n        uses: some-org/deploy-action@v1\n        with:\n          target: ${{ inputs.environment }}\n          dry-run: ${{ inputs.dry_run }}\nYAML");
+        const result = await run("Audit .github/workflows/deploy.yml for security issues with the manual inputs.");
 
-        expect(result.session.outputText).not.toContain("injection");
-        expect(result.session.outputText).not.toContain("RCE");
-        expect(result.session.outputText).not.toContain("command injection");
-        expect(result.session.outputText).toMatch(new RegExp("(no\\s+finding|out\\s+of\\s+scope|no\\s+exploit|hardcoded\\s+(choice|options)|non-interpret)", "i"));
+        await expect(result).toSatisfyJudge(NoFalsePositiveOnHardcodedChoiceJudge);
+        await expect(result).toSatisfyJudge(ExplainsTypeConstrainsValueJudge);
       },
     );
   },

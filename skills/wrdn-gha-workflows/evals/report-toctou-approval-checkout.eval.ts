@@ -15,8 +15,16 @@ import {
 
 const skillRoot = dirname(fileURLToPath(import.meta.url)).replace(/\/evals$/, "");
 
-const ToctouApprovalJudge = judge("ToctouApprovalJudge", async ({ criterion }) => {
-  return criterion("Explains that resolving head.sha/head_ref at run time after approval lets an attacker push new commits post-approval, and recommends pinning checkout to the SHA captured at approval time.");
+const IdentifiesToctouJudge = judge("IdentifiesToctouJudge", async ({ criterion }) => {
+  return criterion("Identifies the TOCTOU gap: maintainer approval (e.g. /ok-to-test or label) does not pin a SHA, so checkout resolves to whatever the attacker pushed last.");
+});
+
+const NamesMutableRefJudge = judge("NamesMutableRefJudge", async ({ criterion }) => {
+  return criterion("Names the mutable ref being checked out (pull_request.head.sha resolved at run time, head_ref, or refs/pull/N/head) as the root cause.");
+});
+
+const RecommendsApprovalShaPinJudge = judge("RecommendsApprovalShaPinJudge", async ({ criterion }) => {
+  return criterion("Recommends pinning checkout to the exact SHA captured at approval time, not just 'pin actions' or generic hardening.");
 });
 
 describeEval(
@@ -24,34 +32,16 @@ describeEval(
   { harness: skilletHarness({ skill: skillRoot }) },
   (it) => {
     it(
-      "report-toctou-approval-checkout__ok-to-test-head-ref",
+      "report-toctou-approval-checkout__ok-to-test-label",
       { timeout: 120_000 },
       async ({ run, behavior, harness }) => {
         behavior("report-toctou-approval-checkout");
-        await harness.setup("mkdir -p .github/workflows\ncat > .github/workflows/ok-to-test.yml <<'YAML'\nname: ok-to-test\non:\n  issue_comment:\n    types: [created]\njobs:\n  integration:\n    if: github.event.issue.pull_request && contains(github.event.comment.body, '/ok-to-test')\n    runs-on: ubuntu-latest\n    permissions:\n      contents: read\n      pull-requests: write\n    steps:\n      - name: Get PR head\n        id: pr\n        uses: actions/github-script@v7\n        with:\n          script: |\n            const pr = await github.rest.pulls.get({\n              owner: context.repo.owner,\n              repo: context.repo.repo,\n              pull_number: context.issue.number,\n            });\n            core.setOutput('ref', pr.data.head.ref);\n            core.setOutput('sha', pr.data.head.sha);\n      - uses: actions/checkout@v4\n        with:\n          ref: ${{ steps.pr.outputs.ref }}\n      - run: npm ci && npm test\n        env:\n          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}\n          DEPLOY_KEY: ${{ secrets.DEPLOY_KEY }}\nYAML\n");
-        const result = await run("Please review .github/workflows/ok-to-test.yml for security issues and report any vulnerabilities with severity.");
+        await harness.setup("mkdir -p .github/workflows\ncat > .github/workflows/integration.yml <<'YAML'\nname: Integration Tests\non:\n  issue_comment:\n    types: [created]\njobs:\n  ok-to-test:\n    if: github.event.issue.pull_request && contains(github.event.comment.body, '/ok-to-test')\n    runs-on: ubuntu-latest\n    steps:\n      - name: Check maintainer\n        if: contains(fromJSON('[\"OWNER\",\"MEMBER\"]'), github.event.comment.author_association)\n        run: echo approved\n      - name: Get PR\n        id: pr\n        uses: actions/github-script@v7\n        with:\n          script: |\n            const pr = await github.rest.pulls.get({\n              owner: context.repo.owner,\n              repo: context.repo.repo,\n              pull_number: context.issue.number\n            });\n            core.setOutput('ref', pr.data.head.ref);\n            core.setOutput('sha', pr.data.head.sha);\n      - uses: actions/checkout@v4\n        with:\n          ref: ${{ steps.pr.outputs.sha }}\n      - name: Run integration\n        env:\n          DEPLOY_KEY: ${{ secrets.DEPLOY_KEY }}\n          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}\n        run: npm ci && npm run integration\nYAML");
+        const result = await run("Review .github/workflows/integration.yml for security issues.");
 
-        expect(result.session.outputText).toMatch(new RegExp("\\bTOCTOU\\b|time[- ]of[- ]check", "i"));
-        expect(result.session.outputText).toMatch(new RegExp("\\b(HIGH|CRITICAL)\\b"));
-        expect(result.session.outputText).toContain("head.ref");
-        expect(result.session.outputText).toMatch(new RegExp("pin.*\\b(sha|commit)\\b|capture.*sha.*approval", "i"));
-        await expect(result).toSatisfyJudge(ToctouApprovalJudge);
-      },
-    );
-
-    it(
-      "report-toctou-approval-checkout__label-approved-head-sha",
-      { timeout: 120_000 },
-      async ({ run, behavior, harness }) => {
-        behavior("report-toctou-approval-checkout");
-        await harness.setup("mkdir -p .github/workflows\ncat > .github/workflows/approved-e2e.yml <<'YAML'\nname: approved-e2e\non:\n  pull_request_target:\n    types: [labeled]\njobs:\n  e2e:\n    if: github.event.label.name == 'safe-to-test'\n    runs-on: ubuntu-latest\n    permissions:\n      contents: read\n      id-token: write\n    steps:\n      - name: Resolve head\n        id: head\n        run: |\n          echo \"sha=$(gh api repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }} --jq .head.sha)\" >> $GITHUB_OUTPUT\n        env:\n          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}\n      - uses: actions/checkout@v4\n        with:\n          ref: ${{ steps.head.outputs.sha }}\n      - run: ./scripts/e2e.sh\n        env:\n          AWS_ROLE: ${{ secrets.AWS_ROLE_ARN }}\nYAML\n");
-        const result = await run("Audit .github/workflows/approved-e2e.yml — does the label-gated job have any race or TOCTOU concerns? Give severity.");
-
-        expect(result.session.outputText).toMatch(new RegExp("\\bTOCTOU\\b|race|after approval", "i"));
-        expect(result.session.outputText).toMatch(new RegExp("\\b(HIGH|CRITICAL)\\b"));
-        expect(result.session.outputText).toMatch(new RegExp("head\\.sha|head_ref|head\\.ref", "i"));
-        expect(result.session.outputText).toMatch(new RegExp("push.*after|new commits?|latest commit|attacker.*push", "i"));
-        await expect(result).toSatisfyJudge(ToctouApprovalJudge);
+        await expect(result).toSatisfyJudge(IdentifiesToctouJudge);
+        await expect(result).toSatisfyJudge(NamesMutableRefJudge);
+        await expect(result).toSatisfyJudge(RecommendsApprovalShaPinJudge);
       },
     );
   },

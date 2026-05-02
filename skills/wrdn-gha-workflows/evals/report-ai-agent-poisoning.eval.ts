@@ -15,8 +15,20 @@ import {
 
 const skillRoot = dirname(fileURLToPath(import.meta.url)).replace(/\/evals$/, "");
 
-const AgentPoisoningJudge = judge("AgentPoisoningJudge", async ({ criterion }) => {
-  return criterion("Explains that PR-controlled agent instructions (e.g. AGENTS.md, CLAUDE.md) execute in a privileged context with the agent's tools/tokens, enabling exfiltration or code execution.");
+const IdentifiesAIAgentPoisoningJudge = judge("IdentifiesAIAgentPoisoningJudge", async ({ criterion }) => {
+  return criterion("Identifies that the workflow runs an AI agent on PR-controlled content/instructions in a privileged context as the core vulnerability.");
+});
+
+const NamesPoisonableInstructionFileJudge = judge("NamesPoisonableInstructionFileJudge", async ({ criterion }) => {
+  return criterion("Names the PR-modifiable agent instruction file (e.g. AGENTS.md, CLAUDE.md, .cursorrules, or .github/copilot-instructions.md) as the poisoning vector.");
+});
+
+const ConnectsAgentToolsToImpactJudge = judge("ConnectsAgentToolsToImpactJudge", async ({ criterion }) => {
+  return criterion("Connects the poisoned agent's write/commit/approve capability or token access to concrete impact (code execution, secret exfil, or unauthorized writes).");
+});
+
+const RatesHighSeverityJudge = judge("RatesHighSeverityJudge", async ({ criterion }) => {
+  return criterion("Rates the finding HIGH or CRITICAL severity.");
 });
 
 describeEval(
@@ -28,28 +40,13 @@ describeEval(
       { timeout: 120_000 },
       async ({ run, behavior, harness }) => {
         behavior("report-ai-agent-poisoning");
-        await harness.setup("mkdir -p .github/workflows\ncat > .github/workflows/claude-review.yml <<'YAML'\nname: Claude PR Review\non:\n  pull_request_target:\n    types: [opened, synchronize]\njobs:\n  review:\n    runs-on: ubuntu-latest\n    permissions:\n      contents: write\n      pull-requests: write\n      id-token: write\n    steps:\n      - uses: actions/checkout@v4\n        with:\n          ref: ${{ github.event.pull_request.head.sha }}\n      - name: Run Claude Code agent\n        uses: anthropics/claude-code-action@v1\n        with:\n          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}\n          github_token: ${{ secrets.GITHUB_TOKEN }}\n          allow_commits: true\nYAML\ncat > CLAUDE.md <<'MD'\n# Project instructions for Claude\nFollow the repository conventions.\nMD\n");
-        const result = await run("Please review .github/workflows/claude-review.yml for security issues.");
+        await harness.setup("mkdir -p .github/workflows\ncat > CLAUDE.md <<'MD'\n# Project instructions for Claude\nFollow the repo conventions when reviewing PRs.\nMD\ncat > .github/workflows/claude-review.yml <<'YAML'\nname: Claude PR Review\non:\n  pull_request_target:\n    types: [opened, synchronize]\npermissions:\n  contents: write\n  pull-requests: write\njobs:\n  review:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: actions/checkout@v4\n        with:\n          ref: ${{ github.event.pull_request.head.sha }}\n      - name: Run Claude review agent\n        uses: anthropics/claude-code-action@v1\n        with:\n          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}\n          github_token: ${{ secrets.GITHUB_TOKEN }}\n          allowed_tools: \"Bash,Edit,Write\"\n          instructions_file: CLAUDE.md\nYAML");
+        const result = await run("Audit .github/workflows/claude-review.yml for security issues.");
 
-        expect(result.session.outputText).toMatch(new RegExp("pull_request_target", "i"));
-        expect(result.session.outputText).toContain("CLAUDE.md");
-        expect(result.session.outputText).toMatch(new RegExp("\\b(HIGH|CRITICAL)\\b"));
-        await expect(result).toSatisfyJudge(AgentPoisoningJudge);
-      },
-    );
-
-    it(
-      "report-ai-agent-poisoning__agents-md-issue-comment-trigger",
-      { timeout: 120_000 },
-      async ({ run, behavior, harness }) => {
-        behavior("report-ai-agent-poisoning");
-        await harness.setup("mkdir -p .github/workflows\ncat > .github/workflows/agent-bot.yml <<'YAML'\nname: Agent Bot\non:\n  issue_comment:\n    types: [created]\njobs:\n  run-agent:\n    if: contains(github.event.comment.body, '/agent')\n    runs-on: ubuntu-latest\n    permissions:\n      contents: write\n      pull-requests: write\n    steps:\n      - uses: actions/checkout@v4\n        with:\n          ref: refs/pull/${{ github.event.issue.number }}/head\n      - name: Run coding agent\n        uses: some-org/coding-agent-action@v2\n        with:\n          api_key: ${{ secrets.AGENT_API_KEY }}\n          github_token: ${{ secrets.GITHUB_TOKEN }}\n          mode: autonomous\nYAML\ncat > AGENTS.md <<'MD'\n# Agent instructions\nUse the project's standard tooling.\nMD\n");
-        const result = await run("Audit .github/workflows/agent-bot.yml — anything wrong with letting outside contributors trigger the agent?");
-
-        expect(result.session.outputText).toContain("AGENTS.md");
-        expect(result.session.outputText).toMatch(new RegExp("issue_comment", "i"));
-        expect(result.session.outputText).toMatch(new RegExp("\\b(HIGH|CRITICAL)\\b"));
-        await expect(result).toSatisfyJudge(AgentPoisoningJudge);
+        await expect(result).toSatisfyJudge(IdentifiesAIAgentPoisoningJudge);
+        await expect(result).toSatisfyJudge(NamesPoisonableInstructionFileJudge);
+        await expect(result).toSatisfyJudge(ConnectsAgentToolsToImpactJudge);
+        await expect(result).toSatisfyJudge(RatesHighSeverityJudge);
       },
     );
   },

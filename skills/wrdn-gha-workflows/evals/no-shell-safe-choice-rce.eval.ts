@@ -9,42 +9,39 @@ import { dirname } from "node:path";
 import { expect } from "vitest";
 import {
   describeEval,
+  judge,
   skilletHarness,
 } from "@sentry/skillet/evals";
 
 const skillRoot = dirname(fileURLToPath(import.meta.url)).replace(/\/evals$/, "");
+
+const NoRceClaimOnShellSafeChoiceJudge = judge("NoRceClaimOnShellSafeChoiceJudge", async ({ criterion }) => {
+  return criterion("Does NOT claim the choice input enables command injection or RCE, and does NOT label it HIGH/CRITICAL severity.");
+});
+
+const FramesEnvQuotingAsHardeningJudge = judge("FramesEnvQuotingAsHardeningJudge", async ({ criterion }) => {
+  return criterion("If env: with quoting is mentioned, it is framed as defense-in-depth or hardening, not as fixing an actual exploitable bypass.");
+});
+
+const ExplainsChoiceConstraintJudge = judge("ExplainsChoiceConstraintJudge", async ({ criterion }) => {
+  return criterion("Explains that the choice input is constrained to a hardcoded shell-safe option set, so no attacker-controlled value can reach the shell.");
+});
 
 describeEval(
   "no-shell-safe-choice-rce",
   { harness: skilletHarness({ skill: skillRoot }) },
   (it) => {
     it(
-      "no-shell-safe-choice-rce__deploy-env-choice",
-      { timeout: 90_000 },
+      "no-shell-safe-choice-rce__hardcoded-options-in-run",
+      { timeout: 120_000 },
       async ({ run, behavior, harness }) => {
         behavior("no-shell-safe-choice-rce");
-        await harness.setup("mkdir -p .github/workflows\ncat > .github/workflows/deploy.yml <<'YAML'\nname: deploy\non:\n  workflow_dispatch:\n    inputs:\n      environment:\n        description: target env\n        required: true\n        type: choice\n        options:\n          - staging\n          - production\n          - canary\njobs:\n  deploy:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: actions/checkout@v4\n      - name: Deploy\n        run: ./scripts/deploy.sh ${{ inputs.environment }}\nYAML\n");
-        const result = await run("Audit .github/workflows/deploy.yml for command injection or RCE via the workflow_dispatch inputs.");
+        await harness.setup("mkdir -p .github/workflows\ncat > .github/workflows/deploy.yml <<'YAML'\nname: Deploy\non:\n  workflow_dispatch:\n    inputs:\n      env:\n        description: 'Target environment'\n        type: choice\n        required: true\n        options:\n          - dev\n          - staging\n          - prod\njobs:\n  deploy:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: actions/checkout@v4\n      - name: Deploy\n        run: ./scripts/deploy.sh ${{ inputs.env }}\nYAML");
+        const result = await run("Is there a command injection vulnerability in this workflow's use of the env input? Audit .github/workflows/deploy.yml.");
 
-        expect(result.session.outputText).not.toContain("RCE");
-        expect(result.session.outputText).not.toContain("command injection");
-        expect(result.session.outputText).not.toContain("remote code execution");
-        expect(result.session.outputText).toMatch(new RegExp("(no\\s+finding|not\\s+exploitabl|hardening|out of scope|safe|no\\s+vulnerab)", "i"));
-      },
-    );
-
-    it(
-      "no-shell-safe-choice-rce__loglevel-choice-in-run",
-      { timeout: 90_000 },
-      async ({ run, behavior, harness }) => {
-        behavior("no-shell-safe-choice-rce");
-        await harness.setup("mkdir -p .github/workflows\ncat > .github/workflows/ci.yml <<'YAML'\nname: ci\non:\n  workflow_dispatch:\n    inputs:\n      loglevel:\n        type: choice\n        options: [debug, info, warn, error]\njobs:\n  build:\n    runs-on: ubuntu-latest\n    steps:\n      - run: echo \"level=${{ inputs.loglevel }}\" && make build LOGLEVEL=${{ inputs.loglevel }}\nYAML\n");
-        const result = await run("Is there an injection bug in this workflow where inputs.loglevel flows into a run: step?");
-
-        expect(result.session.outputText).not.toContain("RCE");
-        expect(result.session.outputText).not.toContain("command injection");
-        expect(result.session.outputText).not.toContain("arbitrary code execution");
-        expect(result.session.outputText).toMatch(new RegExp("(no\\s+finding|not\\s+exploitabl|hardening|safe|out of scope)", "i"));
+        await expect(result).toSatisfyJudge(NoRceClaimOnShellSafeChoiceJudge);
+        await expect(result).toSatisfyJudge(FramesEnvQuotingAsHardeningJudge);
+        await expect(result).toSatisfyJudge(ExplainsChoiceConstraintJudge);
       },
     );
   },

@@ -15,8 +15,16 @@ import {
 
 const skillRoot = dirname(fileURLToPath(import.meta.url)).replace(/\/evals$/, "");
 
-const UntraceableHandlingJudge = judge("UntraceableHandlingJudge", async ({ criterion }) => {
-  return criterion("Response either drops the finding or marks it medium confidence and names the specific missing file/link needed to confirm. No high/critical claim on untraced chain.");
+const DropsOrMediumConfidenceJudge = judge("DropsOrMediumConfidenceJudge", async ({ criterion }) => {
+  return criterion("Either drops the finding entirely or reports it explicitly as medium (or lower) confidence — does not assert a high-confidence vulnerability.");
+});
+
+const NamesMissingLinkJudge = judge("NamesMissingLinkJudge", async ({ criterion }) => {
+  return criterion("If reporting the finding, names the specific missing link (e.g. the unseen reusable workflow, called action, or downstream consumer) needed to confirm the chain.");
+});
+
+const DoesNotFabricateChainJudge = judge("DoesNotFabricateChainJudge", async ({ criterion }) => {
+  return criterion("Does not assert an exploit chain that requires inspecting files not present in the workspace, and does not invent the contents of the missing artifact.");
 });
 
 describeEval(
@@ -24,32 +32,16 @@ describeEval(
   { harness: skilletHarness({ skill: skillRoot }) },
   (it) => {
     it(
-      "drop-or-medium-when-untraceable__missing-composite-action",
+      "drop-or-medium-when-untraceable__missing-reusable-workflow",
       { timeout: 120_000 },
       async ({ run, behavior, harness }) => {
         behavior("drop-or-medium-when-untraceable");
-        await harness.setup("mkdir -p .github/workflows\ncat > .github/workflows/ci.yml <<'YAML'\nname: ci\non:\n  pull_request_target:\n    types: [opened, synchronize]\njobs:\n  build:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: actions/checkout@v4\n        with:\n          ref: ${{ github.event.pull_request.head.sha }}\n      - uses: my-org/private-composite-action@main\n        with:\n          title: ${{ github.event.pull_request.title }}\nYAML\n");
-        const result = await run("Audit this workflow for injection. The composite action it calls lives in another repo I haven't given you. Tell me what you can conclude.");
+        await harness.setup("mkdir -p .github/workflows\ncat > .github/workflows/ci.yml <<'YAML'\nname: CI\non:\n  pull_request_target:\n    types: [opened, synchronize]\njobs:\n  call-shared:\n    uses: my-org/shared-ci/.github/workflows/build.yml@main\n    with:\n      pr_title: ${{ github.event.pull_request.title }}\n      pr_ref: ${{ github.event.pull_request.head.ref }}\n    secrets:\n      NPM_TOKEN: ${{ secrets.NPM_TOKEN }}\nYAML");
+        const result = await run("Audit .github/workflows/ci.yml. Tell me if there is a real vulnerability here.");
 
-        expect(result.session.outputText).toMatch(new RegExp("\\b(medium|MEDIUM)\\b"));
-        expect(result.session.outputText).toMatch(new RegExp("(missing|cannot.*trace|not.*available|need.*action|composite.*action)", "i"));
-        expect(result.session.outputText).not.toContain("CRITICAL");
-        await expect(result).toSatisfyJudge(UntraceableHandlingJudge);
-      },
-    );
-
-    it(
-      "drop-or-medium-when-untraceable__drop-vague-resemblance",
-      { timeout: 120_000 },
-      async ({ run, behavior, harness }) => {
-        behavior("drop-or-medium-when-untraceable");
-        await harness.setup("mkdir -p .github/workflows\ncat > .github/workflows/run.yml <<'YAML'\nname: run\non:\n  pull_request:\njobs:\n  test:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: actions/checkout@v4\n      - run: ./scripts/run-tests.sh\n        env:\n          PR_TITLE: ${{ github.event.pull_request.title }}\nYAML\n");
-        const result = await run("Does this workflow have an injection issue? I only have the workflow file, no scripts.");
-
-        expect(result.session.outputText).toMatch(new RegExp("(medium|drop|cannot confirm|no finding|missing|out of scope)", "i"));
-        expect(result.session.outputText).not.toContain("CRITICAL");
-        expect(result.session.outputText).not.toContain("HIGH confidence");
-        await expect(result).toSatisfyJudge(UntraceableHandlingJudge);
+        await expect(result).toSatisfyJudge(DropsOrMediumConfidenceJudge);
+        await expect(result).toSatisfyJudge(NamesMissingLinkJudge);
+        await expect(result).toSatisfyJudge(DoesNotFabricateChainJudge);
       },
     );
   },

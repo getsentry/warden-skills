@@ -9,10 +9,27 @@ import { dirname } from "node:path";
 import { expect } from "vitest";
 import {
   describeEval,
+  judge,
   skilletHarness,
 } from "@sentry/skillet/evals";
 
 const skillRoot = dirname(fileURLToPath(import.meta.url)).replace(/\/evals$/, "");
+
+const NoFlagOnNumericIdJudge = judge("NoFlagOnNumericIdJudge", async ({ criterion }) => {
+  return criterion("Does NOT report github.event.pull_request.number, issue.number, or run_id as a vulnerability or injection vector.");
+});
+
+const ExplainsNumericResolutionJudge = judge("ExplainsNumericResolutionJudge", async ({ criterion }) => {
+  return criterion("Explains that the expression resolves to a numeric ID (or similar safe primitive) and therefore is not an injection sink.");
+});
+
+const NoFlagOnFullShaJudge = judge("NoFlagOnFullShaJudge", async ({ criterion }) => {
+  return criterion("Does NOT flag github.sha or github.event.pull_request.head.sha used in a run script as an injection or RCE risk.");
+});
+
+const NoFlagOnBaseRepoConstantJudge = judge("NoFlagOnBaseRepoConstantJudge", async ({ criterion }) => {
+  return criterion("Does NOT flag github.repository, github.repository_owner, or github.workflow as attacker-controlled or injectable values.");
+});
 
 describeEval(
   "no-safe-resolved-values",
@@ -20,32 +37,38 @@ describeEval(
   (it) => {
     it(
       "no-safe-resolved-values__pr-number-in-run",
-      { timeout: 90_000 },
+      { timeout: 120_000 },
       async ({ run, behavior, harness }) => {
         behavior("no-safe-resolved-values");
-        await harness.setup("mkdir -p .github/workflows\ncat > .github/workflows/label.yml <<'YAML'\nname: label\non:\n  pull_request_target:\n    types: [opened]\njobs:\n  tag:\n    runs-on: ubuntu-latest\n    steps:\n      - name: echo number\n        run: echo \"PR number is ${{ github.event.pull_request.number }}\"\nYAML\n");
-        const result = await run("Please review .github/workflows/label.yml for injection risks. I'm worried about github.event.pull_request.number being interpolated into the run script.");
+        await harness.setup("mkdir -p .github/workflows\ncat > .github/workflows/comment.yml <<'YAML'\nname: PR Notify\non:\n  pull_request_target:\n    types: [opened]\njobs:\n  notify:\n    runs-on: ubuntu-latest\n    steps:\n      - name: Log PR\n        run: echo \"PR number is ${{ github.event.pull_request.number }}\"\nYAML");
+        const result = await run("Is there an injection risk in this workflow? Audit .github/workflows/comment.yml and tell me if ${{ github.event.pull_request.number }} in the run script is exploitable.");
 
-        expect(result.session.outputText).not.toContain("injection");
-        expect(result.session.outputText).not.toContain("RCE");
-        expect(result.session.outputText).toMatch(new RegExp("\\b(numeric|integer|number|safe|no\\s+finding|not\\s+exploitable|out of scope)\\b", "i"));
-        expect(result.session.outputText).not.toContain("CRITICAL");
-        expect(result.session.outputText).not.toContain("HIGH");
+        await expect(result).toSatisfyJudge(NoFlagOnNumericIdJudge);
+        await expect(result).toSatisfyJudge(ExplainsNumericResolutionJudge);
       },
     );
 
     it(
-      "no-safe-resolved-values__base-sha-and-bool",
-      { timeout: 90_000 },
+      "no-safe-resolved-values__full-sha-in-run",
+      { timeout: 120_000 },
       async ({ run, behavior, harness }) => {
         behavior("no-safe-resolved-values");
-        await harness.setup("mkdir -p .github/workflows\ncat > .github/workflows/build.yml <<'YAML'\nname: build\non:\n  pull_request_target:\njobs:\n  b:\n    runs-on: ubuntu-latest\n    steps:\n      - run: |\n          echo \"base sha: ${{ github.event.pull_request.base.sha }}\"\n          echo \"draft: ${{ github.event.pull_request.draft }}\"\n          echo \"repo: ${{ github.event.repository.full_name }}\"\nYAML\n");
-        const result = await run("Audit .github/workflows/build.yml — it uses github.event.pull_request.base.sha and github.event.pull_request.draft in the run step. Any code injection risk?");
+        await harness.setup("mkdir -p .github/workflows\ncat > .github/workflows/build.yml <<'YAML'\nname: Build\non:\n  push:\n    branches: [main]\njobs:\n  build:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: actions/checkout@v4\n      - name: Tag build\n        run: echo \"Building ${{ github.sha }}\" > build.txt\nYAML");
+        const result = await run("Audit .github/workflows/build.yml — is using ${{ github.sha }} inside the run: shell script an injection vulnerability?");
 
-        expect(result.session.outputText).not.toContain("injection");
-        expect(result.session.outputText).not.toContain("arbitrary code");
-        expect(result.session.outputText).not.toContain("CRITICAL");
-        expect(result.session.outputText).toMatch(new RegExp("\\b(SHA|boolean|constant|safe|no\\s+finding|not\\s+exploitable)\\b", "i"));
+        await expect(result).toSatisfyJudge(NoFlagOnFullShaJudge);
+      },
+    );
+
+    it(
+      "no-safe-resolved-values__base-repo-constant",
+      { timeout: 120_000 },
+      async ({ run, behavior, harness }) => {
+        behavior("no-safe-resolved-values");
+        await harness.setup("mkdir -p .github/workflows\ncat > .github/workflows/release.yml <<'YAML'\nname: Release\non:\n  push:\n    tags: ['v*']\njobs:\n  release:\n    runs-on: ubuntu-latest\n    steps:\n      - name: Print repo\n        run: echo \"Releasing ${{ github.repository }} owned by ${{ github.repository_owner }}\"\nYAML");
+        const result = await run("Audit .github/workflows/release.yml. Does interpolating ${{ github.repository }} into the run script create an injection risk?");
+
+        await expect(result).toSatisfyJudge(NoFlagOnBaseRepoConstantJudge);
       },
     );
   },

@@ -15,8 +15,24 @@ import {
 
 const skillRoot = dirname(fileURLToPath(import.meta.url)).replace(/\/evals$/, "");
 
-const CacheRunnerAbuseJudge = judge("CacheRunnerAbuseJudge", async ({ criterion }) => {
-  return criterion("Explains how attacker-controlled cache/artifact contents (or self-hosted runner reuse) reach a privileged job that executes or trusts them, including the eviction-replace mechanic when relevant.");
+const IdentifiesCachePoisoningJudge = judge("IdentifiesCachePoisoningJudge", async ({ criterion }) => {
+  return criterion("Identifies that the cache is populated by an untrusted PR job and later restored and executed in a privileged context, naming cache poisoning as the issue.");
+});
+
+const ExplainsPrivilegedExecutionJudge = judge("ExplainsPrivilegedExecutionJudge", async ({ criterion }) => {
+  return criterion("Explains the privileged consumer trusts/executes the poisoned cache contents (e.g., runs scripts, binaries, or node_modules from cache) with secrets or write tokens.");
+});
+
+const RatesHighSeverityJudge = judge("RatesHighSeverityJudge", async ({ criterion }) => {
+  return criterion("Rates the finding HIGH or CRITICAL severity.");
+});
+
+const IdentifiesSelfHostedRunnerAbuseJudge = judge("IdentifiesSelfHostedRunnerAbuseJudge", async ({ criterion }) => {
+  return criterion("Flags that untrusted PR code reaches a self-hosted (especially persistent/non-ephemeral) runner, citing runner persistence or sensitive access as the risk.");
+});
+
+const IdentifiesArtifactTrustJudge = judge("IdentifiesArtifactTrustJudge", async ({ criterion }) => {
+  return criterion("Identifies that an artifact produced by an untrusted/PR job is downloaded and executed or trusted by a later privileged workflow without validation.");
 });
 
 describeEval(
@@ -24,49 +40,43 @@ describeEval(
   { harness: skilletHarness({ skill: skillRoot }) },
   (it) => {
     it(
-      "report-cache-artifact-runner-abuse__cache-poisoning-pr",
+      "report-cache-artifact-runner-abuse__cache-poisoning-restore-execute",
       { timeout: 120_000 },
       async ({ run, behavior, harness }) => {
         behavior("report-cache-artifact-runner-abuse");
-        await harness.setup("mkdir -p .github/workflows\ncat > .github/workflows/ci.yml <<'YAML'\nname: ci\non:\n  pull_request:\n  push:\n    branches: [main]\njobs:\n  build:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: actions/checkout@v4\n      - uses: actions/cache@v4\n        with:\n          path: node_modules\n          key: deps-${{ hashFiles('package-lock.json') }}\n      - run: npm ci\n      - run: npm run build\n  release:\n    needs: build\n    if: github.ref == 'refs/heads/main'\n    runs-on: ubuntu-latest\n    steps:\n      - uses: actions/checkout@v4\n      - uses: actions/cache@v4\n        with:\n          path: node_modules\n          key: deps-${{ hashFiles('package-lock.json') }}\n      - run: npm run release\n        env:\n          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}\nYAML\n");
-        const result = await run("Please audit .github/workflows/ci.yml for supply-chain risks. Focus on the cache and how it interacts with the release job.");
+        await harness.setup("mkdir -p .github/workflows\ncat > .github/workflows/pr-build.yml <<'YAML'\nname: PR Build\non:\n  pull_request:\njobs:\n  build:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: actions/checkout@v4\n      - uses: actions/cache@v4\n        with:\n          path: |\n            node_modules\n            .build-cache\n          key: deps-${{ github.event.pull_request.head.sha }}\n          restore-keys: |\n            deps-\n      - run: npm install\nYAML\ncat > .github/workflows/release.yml <<'YAML'\nname: Release\non:\n  push:\n    branches: [main]\njobs:\n  publish:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: actions/checkout@v4\n      - uses: actions/cache@v4\n        with:\n          path: |\n            node_modules\n            .build-cache\n          key: deps-${{ github.sha }}\n          restore-keys: |\n            deps-\n      - run: node .build-cache/postinstall.js\n      - run: npm publish\n        env:\n          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}\nYAML");
+        const result = await run("Audit the workflows in .github/workflows/ for security issues.");
 
-        expect(result.session.outputText).toContain("cache");
-        expect(result.session.outputText).toMatch(new RegExp("\\b(poison|poisoning|attacker-controlled)\\b", "i"));
-        expect(result.session.outputText).toMatch(new RegExp("\\b(HIGH|CRITICAL)\\b"));
-        expect(result.session.outputText).toContain("NPM_TOKEN");
-        await expect(result).toSatisfyJudge(CacheRunnerAbuseJudge);
+        await expect(result).toSatisfyJudge(IdentifiesCachePoisoningJudge);
+        await expect(result).toSatisfyJudge(ExplainsPrivilegedExecutionJudge);
+        await expect(result).toSatisfyJudge(RatesHighSeverityJudge);
       },
     );
 
     it(
-      "report-cache-artifact-runner-abuse__self-hosted-pr-runner",
+      "report-cache-artifact-runner-abuse__self-hosted-runner-pr",
       { timeout: 120_000 },
       async ({ run, behavior, harness }) => {
         behavior("report-cache-artifact-runner-abuse");
-        await harness.setup("mkdir -p .github/workflows\ncat > .github/workflows/test.yml <<'YAML'\nname: test\non:\n  pull_request:\njobs:\n  test:\n    runs-on: [self-hosted, linux, x64]\n    steps:\n      - uses: actions/checkout@v4\n        with:\n          ref: ${{ github.event.pull_request.head.sha }}\n      - run: npm install\n      - run: npm test\nYAML\n");
-        const result = await run("Review .github/workflows/test.yml — anything dangerous about the runner choice for PRs?");
+        await harness.setup("mkdir -p .github/workflows\ncat > .github/workflows/ci.yml <<'YAML'\nname: CI\non:\n  pull_request:\njobs:\n  test:\n    runs-on: [self-hosted, linux, builder]\n    steps:\n      - uses: actions/checkout@v4\n        with:\n          ref: ${{ github.event.pull_request.head.sha }}\n      - run: ./scripts/test.sh\n      - run: npm install && npm test\nYAML");
+        const result = await run("Review .github/workflows/ci.yml — anything concerning?");
 
-        expect(result.session.outputText).toContain("self-hosted");
-        expect(result.session.outputText).toMatch(new RegExp("\\b(persistent|non-ephemeral|reused|sensitive)\\b", "i"));
-        expect(result.session.outputText).toMatch(new RegExp("\\b(HIGH|CRITICAL)\\b"));
-        await expect(result).toSatisfyJudge(CacheRunnerAbuseJudge);
+        await expect(result).toSatisfyJudge(IdentifiesSelfHostedRunnerAbuseJudge);
+        await expect(result).toSatisfyJudge(RatesHighSeverityJudge);
       },
     );
 
     it(
-      "report-cache-artifact-runner-abuse__artifact-into-privileged",
+      "report-cache-artifact-runner-abuse__artifact-handoff-privileged",
       { timeout: 120_000 },
       async ({ run, behavior, harness }) => {
         behavior("report-cache-artifact-runner-abuse");
-        await harness.setup("mkdir -p .github/workflows\ncat > .github/workflows/build.yml <<'YAML'\nname: build\non:\n  pull_request:\njobs:\n  build:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: actions/checkout@v4\n        with:\n          ref: ${{ github.event.pull_request.head.sha }}\n      - run: npm run build\n      - uses: actions/upload-artifact@v4\n        with:\n          name: dist\n          path: dist/\nYAML\ncat > .github/workflows/publish.yml <<'YAML'\nname: publish\non:\n  workflow_run:\n    workflows: [build]\n    types: [completed]\njobs:\n  publish:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: actions/download-artifact@v4\n        with:\n          name: dist\n      - run: node dist/index.js\n        env:\n          DEPLOY_KEY: ${{ secrets.DEPLOY_KEY }}\nYAML\n");
-        const result = await run("Audit these two workflows. The first runs on PRs and uploads a build artifact; the second runs on workflow_run and publishes. Anything to worry about?");
+        await harness.setup("mkdir -p .github/workflows\ncat > .github/workflows/build.yml <<'YAML'\nname: Build\non:\n  pull_request:\njobs:\n  build:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: actions/checkout@v4\n      - run: ./build.sh\n      - uses: actions/upload-artifact@v4\n        with:\n          name: build-output\n          path: dist/\nYAML\ncat > .github/workflows/deploy.yml <<'YAML'\nname: Deploy\non:\n  workflow_run:\n    workflows: [Build]\n    types: [completed]\njobs:\n  deploy:\n    runs-on: ubuntu-latest\n    permissions:\n      contents: write\n      id-token: write\n    steps:\n      - uses: actions/download-artifact@v4\n        with:\n          name: build-output\n          path: dist/\n      - run: ./dist/deploy.sh\n        env:\n          AWS_ROLE: ${{ secrets.AWS_DEPLOY_ROLE }}\nYAML");
+        const result = await run("Check these workflows for security problems.");
 
-        expect(result.session.outputText).toContain("artifact");
-        expect(result.session.outputText).toContain("workflow_run");
-        expect(result.session.outputText).toMatch(new RegExp("\\b(HIGH|CRITICAL)\\b"));
-        expect(result.session.outputText).toContain("DEPLOY_KEY");
-        await expect(result).toSatisfyJudge(CacheRunnerAbuseJudge);
+        await expect(result).toSatisfyJudge(IdentifiesArtifactTrustJudge);
+        await expect(result).toSatisfyJudge(ExplainsPrivilegedExecutionJudge);
+        await expect(result).toSatisfyJudge(RatesHighSeverityJudge);
       },
     );
   },

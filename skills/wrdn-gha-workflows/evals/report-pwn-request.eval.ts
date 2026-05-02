@@ -15,8 +15,20 @@ import {
 
 const skillRoot = dirname(fileURLToPath(import.meta.url)).replace(/\/evals$/, "");
 
-const PwnRequestJudge = judge("PwnRequestJudge", async ({ criterion }) => {
-  return criterion("Ties the privileged trigger (pull_request_target/workflow_run) to checkout or execution of PR-controlled code with secrets or write tokens available. Generic 'pin actions' does not satisfy.");
+const IdentifiesPrivilegedTriggerJudge = judge("IdentifiesPrivilegedTriggerJudge", async ({ criterion }) => {
+  return criterion("Names pull_request_target (or workflow_run / equivalent privileged trigger) as the trusted context enabling the issue.");
+});
+
+const IdentifiesPRControlledCheckoutJudge = judge("IdentifiesPRControlledCheckoutJudge", async ({ criterion }) => {
+  return criterion("Identifies that the workflow checks out or loads code from a PR-controlled ref (e.g. pull_request.head.sha or head.ref).");
+});
+
+const ConnectsSecretsOrWriteTokenJudge = judge("ConnectsSecretsOrWriteTokenJudge", async ({ criterion }) => {
+  return criterion("Connects the execution of PR-controlled code to availability of secrets or a write-scoped token in that job.");
+});
+
+const RatesHighOrCriticalSeverityJudge = judge("RatesHighOrCriticalSeverityJudge", async ({ criterion }) => {
+  return criterion("Treats the finding as high or critical severity (pwn-request class), not a minor hardening note.");
 });
 
 describeEval(
@@ -28,13 +40,13 @@ describeEval(
       { timeout: 120_000 },
       async ({ run, behavior, harness }) => {
         behavior("report-pwn-request");
-        await harness.setup("mkdir -p .github/workflows\ncat > .github/workflows/ci.yml <<'YAML'\nname: CI\non:\n  pull_request_target:\n    types: [opened, synchronize]\n\njobs:\n  build:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: actions/checkout@v4\n        with:\n          ref: ${{ github.event.pull_request.head.sha }}\n          repository: ${{ github.event.pull_request.head.repo.full_name }}\n      - run: npm install\n      - run: npm test\n        env:\n          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}\n          DEPLOY_KEY: ${{ secrets.DEPLOY_KEY }}\nYAML");
-        const result = await run("Please review .github/workflows/ci.yml in this repo for security issues and tell me if there's anything serious.");
+        await harness.setup("mkdir -p .github/workflows\ncat > .github/workflows/ci.yml <<'YAML'\nname: CI\non:\n  pull_request_target:\n    branches: [main]\njobs:\n  build:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: actions/checkout@v4\n        with:\n          ref: ${{ github.event.pull_request.head.sha }}\n      - run: npm ci && npm test\n        env:\n          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}\nYAML");
+        const result = await run("Audit .github/workflows/ci.yml for security issues.");
 
-        expect(result.session.outputText).toMatch(new RegExp("pull_request_target", "i"));
-        expect(result.session.outputText).toMatch(new RegExp("\\b(HIGH|CRITICAL)\\b"));
-        expect(result.session.outputText).toMatch(new RegExp("(checkout|head\\.sha|head\\.repo)", "i"));
-        await expect(result).toSatisfyJudge(PwnRequestJudge);
+        await expect(result).toSatisfyJudge(IdentifiesPrivilegedTriggerJudge);
+        await expect(result).toSatisfyJudge(IdentifiesPRControlledCheckoutJudge);
+        await expect(result).toSatisfyJudge(ConnectsSecretsOrWriteTokenJudge);
+        await expect(result).toSatisfyJudge(RatesHighOrCriticalSeverityJudge);
       },
     );
 
@@ -43,13 +55,13 @@ describeEval(
       { timeout: 120_000 },
       async ({ run, behavior, harness }) => {
         behavior("report-pwn-request");
-        await harness.setup("mkdir -p .github/workflows\ncat > .github/workflows/deploy.yml <<'YAML'\nname: Deploy on PR build\non:\n  workflow_run:\n    workflows: [\"PR Build\"]\n    types: [completed]\n\npermissions:\n  contents: write\n  pull-requests: write\n\njobs:\n  deploy:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: actions/download-artifact@v3\n        with:\n          name: pr-build\n      - run: |\n          unzip -o pr-build.zip\n          node ./dist/index.js\n        env:\n          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}\n          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}\nYAML");
-        const result = await run("Audit .github/workflows/deploy.yml and let me know if it has any exploitable vulnerabilities.");
+        await harness.setup("mkdir -p .github/workflows\ncat > .github/workflows/deploy.yml <<'YAML'\nname: Deploy on PR build\non:\n  workflow_run:\n    workflows: [\"PR Build\"]\n    types: [completed]\njobs:\n  deploy:\n    runs-on: ubuntu-latest\n    permissions:\n      contents: write\n    steps:\n      - uses: actions/checkout@v4\n        with:\n          ref: ${{ github.event.workflow_run.head_sha }}\n      - run: ./scripts/deploy.sh\n        env:\n          DEPLOY_KEY: ${{ secrets.DEPLOY_KEY }}\nYAML");
+        const result = await run("Review .github/workflows/deploy.yml — anything dangerous?");
 
-        expect(result.session.outputText).toMatch(new RegExp("workflow_run", "i"));
-        expect(result.session.outputText).toMatch(new RegExp("\\b(HIGH|CRITICAL)\\b"));
-        expect(result.session.outputText).toMatch(new RegExp("(artifact|download-artifact|pr.build)", "i"));
-        await expect(result).toSatisfyJudge(PwnRequestJudge);
+        await expect(result).toSatisfyJudge(IdentifiesPrivilegedTriggerJudge);
+        await expect(result).toSatisfyJudge(IdentifiesPRControlledCheckoutJudge);
+        await expect(result).toSatisfyJudge(ConnectsSecretsOrWriteTokenJudge);
+        await expect(result).toSatisfyJudge(RatesHighOrCriticalSeverityJudge);
       },
     );
   },

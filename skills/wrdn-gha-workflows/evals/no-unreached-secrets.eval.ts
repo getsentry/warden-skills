@@ -9,26 +9,34 @@ import { dirname } from "node:path";
 import { expect } from "vitest";
 import {
   describeEval,
+  judge,
   skilletHarness,
 } from "@sentry/skillet/evals";
 
 const skillRoot = dirname(fileURLToPath(import.meta.url)).replace(/\/evals$/, "");
+
+const NoFalsePositiveOnUnreachedSecretJudge = judge("NoFalsePositiveOnUnreachedSecretJudge", async ({ criterion }) => {
+  return criterion("Does NOT flag the secret usage as a vulnerability or exfiltration risk, and does not recommend treating it as exploitable.");
+});
+
+const ExplainsSecretNotReachableJudge = judge("ExplainsSecretNotReachableJudge", async ({ criterion }) => {
+  return criterion("Explains that the secret is used only in a job that does not run attacker-controlled code or consume attacker-controlled artifacts, so there is no exploitable path.");
+});
 
 describeEval(
   "no-unreached-secrets",
   { harness: skilletHarness({ skill: skillRoot }) },
   (it) => {
     it(
-      "no-unreached-secrets__deploy-job-no-pr-input",
+      "no-unreached-secrets__push-main-deploy",
       { timeout: 120_000 },
       async ({ run, behavior, harness }) => {
         behavior("no-unreached-secrets");
-        await harness.setup("mkdir -p .github/workflows\ncat > .github/workflows/deploy.yml <<'YAML'\nname: deploy\non:\n  push:\n    branches: [main]\njobs:\n  deploy:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: actions/checkout@v4\n        with:\n          ref: ${{ github.sha }}\n      - name: Deploy\n        env:\n          DEPLOY_TOKEN: ${{ secrets.DEPLOY_TOKEN }}\n          AWS_KEY: ${{ secrets.AWS_ACCESS_KEY_ID }}\n        run: ./scripts/deploy.sh\nYAML\nmkdir -p scripts\ncat > scripts/deploy.sh <<'SH'\n#!/bin/bash\necho \"deploying commit $GITHUB_SHA\"\nSH\nchmod +x scripts/deploy.sh\n");
-        const result = await run("Audit .github/workflows/deploy.yml for security issues. Are the secrets referenced in this workflow at risk?");
+        await harness.setup("mkdir -p .github/workflows\ncat > .github/workflows/deploy.yml <<'YAML'\nname: Deploy\non:\n  push:\n    branches: [main]\njobs:\n  publish:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: actions/checkout@v4\n      - uses: actions/setup-node@v4\n        with:\n          node-version: '20'\n      - run: npm ci\n      - run: npm publish\n        env:\n          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}\nYAML");
+        const result = await run("Audit .github/workflows/deploy.yml — is the use of NPM_TOKEN here a security issue?");
 
-        expect(result.session.outputText).not.toContain("secret exfiltration");
-        expect(result.session.outputText).not.toContain("secret leak");
-        expect(result.session.outputText).toMatch(new RegExp("(no\\s+finding|not\\s+exploitable|no\\s+attacker[- ]controlled|out\\s+of\\s+scope|no\\s+exploitable\\s+path|safe)", "i"));
+        await expect(result).toSatisfyJudge(NoFalsePositiveOnUnreachedSecretJudge);
+        await expect(result).toSatisfyJudge(ExplainsSecretNotReachableJudge);
       },
     );
   },

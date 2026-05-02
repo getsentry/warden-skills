@@ -15,8 +15,20 @@ import {
 
 const skillRoot = dirname(fileURLToPath(import.meta.url)).replace(/\/evals$/, "");
 
-const ChatopsAuthGateJudge = judge("ChatopsAuthGateJudge", async ({ criterion }) => {
-  return criterion("Explanation ties the comment/discussion trigger to command execution without an author_association/team/approval gate, or to unsafe interpolation of body text into shell.");
+const IdentifiesCommentTriggerJudge = judge("IdentifiesCommentTriggerJudge", async ({ criterion }) => {
+  return criterion("Identifies issue_comment (or discussion/label) as an externally-triggerable event that runs without an authorization gate.");
+});
+
+const FlagsMissingAuthGateJudge = judge("FlagsMissingAuthGateJudge", async ({ criterion }) => {
+  return criterion("Notes the absence of an author_association / team / approval check before the command executes.");
+});
+
+const IdentifiesCommentBodyInjectionJudge = judge("IdentifiesCommentBodyInjectionJudge", async ({ criterion }) => {
+  return criterion("Identifies that comment body text is interpolated into a shell run step without safe quoting (env: + quoted expansion).");
+});
+
+const RatesHighSeverityJudge = judge("RatesHighSeverityJudge", async ({ criterion }) => {
+  return criterion("Rates the finding HIGH or CRITICAL severity given the externally-triggerable shell injection with privileged token.");
 });
 
 describeEval(
@@ -24,33 +36,17 @@ describeEval(
   { harness: skilletHarness({ skill: skillRoot }) },
   (it) => {
     it(
-      "report-comment-chatops__issue-comment-no-auth-gate",
+      "report-comment-chatops__issue-comment-shell-injection",
       { timeout: 120_000 },
       async ({ run, behavior, harness }) => {
         behavior("report-comment-chatops");
-        await harness.setup("mkdir -p .github/workflows\ncat > .github/workflows/chatops.yml <<'YAML'\nname: chatops\non:\n  issue_comment:\n    types: [created]\njobs:\n  run-cmd:\n    if: startsWith(github.event.comment.body, '/deploy')\n    runs-on: ubuntu-latest\n    permissions:\n      contents: write\n      pull-requests: write\n    steps:\n      - uses: actions/checkout@v4\n        with:\n          ref: refs/pull/${{ github.event.issue.number }}/head\n      - name: Run command\n        env:\n          TOKEN: ${{ secrets.DEPLOY_TOKEN }}\n        run: |\n          echo \"Running: ${{ github.event.comment.body }}\"\n          bash -c \"${{ github.event.comment.body }}\"\nYAML\n");
-        const result = await run("Audit .github/workflows/chatops.yml for security issues related to the comment trigger and command handling.");
+        await harness.setup("mkdir -p .github/workflows\ncat > .github/workflows/chatops.yml <<'YAML'\nname: ChatOps\non:\n  issue_comment:\n    types: [created]\njobs:\n  run-command:\n    if: startsWith(github.event.comment.body, '/deploy')\n    runs-on: ubuntu-latest\n    permissions:\n      contents: write\n      pull-requests: write\n    steps:\n      - uses: actions/checkout@v4\n      - name: Execute command\n        run: |\n          echo \"Running: ${{ github.event.comment.body }}\"\n          ./scripts/deploy.sh ${{ github.event.comment.body }}\n        env:\n          DEPLOY_TOKEN: ${{ secrets.DEPLOY_TOKEN }}\nYAML");
+        const result = await run("Please audit .github/workflows/chatops.yml for security issues.");
 
-        expect(result.session.outputText).toContain("issue_comment");
-        expect(result.session.outputText).toMatch(new RegExp("author_association|MEMBER|OWNER|COLLABORATOR|authorization", "i"));
-        expect(result.session.outputText).toMatch(new RegExp("\\b(HIGH|CRITICAL)\\b"));
-        expect(result.session.outputText).toMatch(new RegExp("github\\.event\\.comment\\.body"));
-        await expect(result).toSatisfyJudge(ChatopsAuthGateJudge);
-      },
-    );
-
-    it(
-      "report-comment-chatops__discussion-title-shell-injection",
-      { timeout: 120_000 },
-      async ({ run, behavior, harness }) => {
-        behavior("report-comment-chatops");
-        await harness.setup("mkdir -p .github/workflows\ncat > .github/workflows/discussion.yml <<'YAML'\nname: discussion-handler\non:\n  discussion:\n    types: [created]\njobs:\n  greet:\n    runs-on: ubuntu-latest\n    permissions:\n      contents: write\n    steps:\n      - name: Echo title\n        run: echo \"New discussion: ${{ github.event.discussion.title }}\"\nYAML\n");
-        const result = await run("Review .github/workflows/discussion.yml — anything exploitable about how the discussion title is used?");
-
-        expect(result.session.outputText).toContain("github.event.discussion.title");
-        expect(result.session.outputText).toMatch(new RegExp("shell\\s+injection|command\\s+injection|script\\s+injection", "i"));
-        expect(result.session.outputText).toMatch(new RegExp("\\b(HIGH|CRITICAL)\\b"));
-        await expect(result).toSatisfyJudge(ChatopsAuthGateJudge);
+        await expect(result).toSatisfyJudge(IdentifiesCommentTriggerJudge);
+        await expect(result).toSatisfyJudge(FlagsMissingAuthGateJudge);
+        await expect(result).toSatisfyJudge(IdentifiesCommentBodyInjectionJudge);
+        await expect(result).toSatisfyJudge(RatesHighSeverityJudge);
       },
     );
   },

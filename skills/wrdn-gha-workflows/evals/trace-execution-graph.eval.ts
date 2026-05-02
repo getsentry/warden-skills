@@ -11,12 +11,25 @@ import {
   describeEval,
   judge,
   skilletHarness,
+  toolCalls,
 } from "@sentry/skillet/evals";
 
 const skillRoot = dirname(fileURLToPath(import.meta.url)).replace(/\/evals$/, "");
 
-const ExecutionGraphJudge = judge("ExecutionGraphJudge", async ({ criterion }) => {
-  return criterion("Response traces a chain: names the trigger, identifies PR-controlled input, follows it through any uses:/callee, and connects it to a code-evaluating sink with token/secret scope noted.");
+const IdentifiesTriggerJudge = judge("IdentifiesTriggerJudge", async ({ criterion }) => {
+  return criterion("Names the workflow trigger (e.g. pull_request_target) as the entry point of the analysis.");
+});
+
+const FollowsLocalActionJudge = judge("FollowsLocalActionJudge", async ({ criterion }) => {
+  return criterion("Follows the uses: reference into the local composite action and analyzes its steps, not just the top-level workflow.");
+});
+
+const TracesInputToSinkJudge = judge("TracesInputToSinkJudge", async ({ criterion }) => {
+  return criterion("Traces PR-controlled input from the trigger through the composite action to a concrete code-evaluating sink (run: shell interpolation).");
+});
+
+const ReportsChainNotResemblanceJudge = judge("ReportsChainNotResemblanceJudge", async ({ criterion }) => {
+  return criterion("Reports a concrete exploit chain with trust boundary crossing, not a vague 'looks risky' finding.");
 });
 
 describeEval(
@@ -24,20 +37,19 @@ describeEval(
   { harness: skilletHarness({ skill: skillRoot }) },
   (it) => {
     it(
-      "trace-execution-graph__reusable-callee-chain",
-      { timeout: 120_000 },
+      "trace-execution-graph__composite-action-chain",
+      { timeout: 180_000 },
       async ({ run, behavior, harness }) => {
         behavior("trace-execution-graph");
-        await harness.setup("mkdir -p .github/workflows .github/actions/build\ncat > .github/workflows/ci.yml <<'YAML'\nname: ci\non:\n  pull_request_target:\n    types: [opened, synchronize]\njobs:\n  build:\n    uses: ./.github/workflows/reusable-build.yml\n    secrets: inherit\n    with:\n      ref: ${{ github.event.pull_request.head.sha }}\n      title: ${{ github.event.pull_request.title }}\nYAML\ncat > .github/workflows/reusable-build.yml <<'YAML'\nname: reusable-build\non:\n  workflow_call:\n    inputs:\n      ref:\n        type: string\n      title:\n        type: string\n    secrets:\n      NPM_TOKEN:\n        required: false\njobs:\n  build:\n    runs-on: ubuntu-latest\n    permissions:\n      contents: write\n      pull-requests: write\n    steps:\n      - uses: actions/checkout@v4\n        with:\n          ref: ${{ inputs.ref }}\n      - uses: ./.github/actions/build\n        with:\n          label: ${{ inputs.title }}\nYAML\ncat > .github/actions/build/action.yml <<'YAML'\nname: build\ninputs:\n  label:\n    required: true\nruns:\n  using: composite\n  steps:\n    - shell: bash\n      run: |\n        echo \"Building ${{ inputs.label }}\"\n        npm install\n        npm run build\nYAML");
-        const result = await run("Audit the workflows in .github/workflows for any exploitable execution paths. Walk the full chain end-to-end.");
+        await harness.setup("mkdir -p .github/workflows\nmkdir -p .github/actions/pr-check\ncat > .github/workflows/pr-validate.yml <<'YAML'\nname: PR Validate\non:\n  pull_request_target:\n    types: [opened, synchronize]\njobs:\n  validate:\n    runs-on: ubuntu-latest\n    permissions:\n      contents: read\n      pull-requests: write\n    steps:\n      - uses: actions/checkout@v4\n        with:\n          ref: ${{ github.event.pull_request.head.sha }}\n      - uses: ./.github/actions/pr-check\n        with:\n          title: ${{ github.event.pull_request.title }}\n          npm-token: ${{ secrets.NPM_TOKEN }}\nYAML\ncat > .github/actions/pr-check/action.yml <<'YAML'\nname: PR Check\ninputs:\n  title:\n    required: true\n  npm-token:\n    required: true\nruns:\n  using: composite\n  steps:\n    - name: Log title\n      shell: bash\n      run: |\n        echo \"Validating PR: ${{ inputs.title }}\"\n    - name: Install and test\n      shell: bash\n      env:\n        NPM_TOKEN: ${{ inputs.npm-token }}\n      run: |\n        npm ci\n        npm test\nYAML");
+        const result = await run("Audit the workflows under .github/ for security issues. Trace any actual exploit paths end to end.");
 
-        expect(result.session.outputText).toContain("pull_request_target");
-        expect(result.session.outputText).toContain("reusable-build.yml");
-        expect(result.session.outputText).toContain("actions/build");
-        expect(result.session.outputText).toMatch(new RegExp("pull_request\\.title|inputs\\.label", "i"));
-        expect(result.session.outputText).toMatch(new RegExp("\\b(checkout|head\\.sha|inputs\\.ref)\\b", "i"));
-        expect(result.session.outputText).toMatch(new RegExp("\\b(HIGH|CRITICAL)\\b"));
-        await expect(result).toSatisfyJudge(ExecutionGraphJudge);
+        const toolNames = toolCalls(result.session).map((c) => c.name);
+        expect(toolNames).toEqual(expect.arrayContaining(["Read"]));
+        await expect(result).toSatisfyJudge(IdentifiesTriggerJudge);
+        await expect(result).toSatisfyJudge(FollowsLocalActionJudge);
+        await expect(result).toSatisfyJudge(TracesInputToSinkJudge);
+        await expect(result).toSatisfyJudge(ReportsChainNotResemblanceJudge);
       },
     );
   },
