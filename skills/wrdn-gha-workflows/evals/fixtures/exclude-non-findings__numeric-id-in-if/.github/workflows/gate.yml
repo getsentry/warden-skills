@@ -1,8 +1,0 @@
-name: Gate
-on: pull_request_target
-jobs:
-  check:
-    if: ${{ github.event.pull_request.number != 0 }}
-    runs-on: ubuntu-latest
-    steps:
-      - run: echo "PR number is ${{ github.event.pull_request.number }}"

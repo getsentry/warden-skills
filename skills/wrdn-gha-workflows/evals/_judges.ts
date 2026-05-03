@@ -6,312 +6,170 @@
 // plan (or use `skillet improve`); criteria flow into this
 // file through the consolidation pass.
 // ──────────────────────────────────────────────────────────
-import { judge } from "@sentry/skillet/evals";
-
-export const ConnectsCallerCalleeChainJudge = judge("ConnectsCallerCalleeChainJudge", async ({ criterion }) => {
-  return criterion("Connects the caller's privileged trigger and inherited secrets/permissions to the callee's unsafe sink, showing the chain spans both files.");
-});
-
-export const ConnectsExploitChainJudge = judge("ConnectsExploitChainJudge", async ({ criterion }) => {
-  return criterion("Ties the privileged trigger to checkout/execution/import/load of PR-controlled code while secrets or write tokens are available.");
-});
-
-export const ConnectsPolicyGapToExploitJudge = judge("ConnectsPolicyGapToExploitJudge", async ({ criterion }) => {
-  return criterion("When policy gaps ARE mentioned, ties them to a concrete exploitable path in the workflow (e.g. a privileged trigger executing PR code) rather than as standalone repo-hygiene findings.");
-});
-
-export const ConnectsPrivilegedContextJudge = judge("ConnectsPrivilegedContextJudge", async ({ criterion }) => {
-  return criterion("Connects the unpinned action to a privileged context such as release, deploy, publish, signing, OIDC, or write-scoped tokens/secrets.");
-});
-
-export const DistinguishesCallerPrivilegeDeltaJudge = judge("DistinguishesCallerPrivilegeDeltaJudge", async ({ criterion }) => {
-  return criterion("Explains that workflow_dispatch is not external by default and ties severity to whether the job grants more privileges than the caller already has.");
-});
-
-export const DistinguishesPrivilegedTriggerJudge = judge("DistinguishesPrivilegedTriggerJudge", async ({ criterion }) => {
-  return criterion("Correctly distinguishes that default checkout under pull_request_target fetches base repo code, not the attacker's PR head, so this workflow is not exploitable.");
-});
-
-export const DoesNotFabricateChainJudge = judge("DoesNotFabricateChainJudge", async ({ criterion }) => {
-  return criterion("Does not invent or assume the contents of the unavailable file to complete the exploit chain.");
-});
-
-export const DoesNotFabricateEvidenceJudge = judge("DoesNotFabricateEvidenceJudge", async ({ criterion }) => {
-  return criterion("Does not invent a checkout step, secret usage, shell interpolation, or sink that is not actually present in the workflow.");
-});
-
-export const DoesNotFabricateSinkJudge = judge("DoesNotFabricateSinkJudge", async ({ criterion }) => {
-  return criterion("Does NOT invent a downstream sink, reinterpretation, or exploit path that is not present in the fixture.");
-});
-
-export const DoesNotFlagBarePullRequestJudge = judge("DoesNotFlagBarePullRequestJudge", async ({ criterion }) => {
-  return criterion("Does NOT report the plain pull_request workflow as a vulnerability; treats it as safe given read-only default token and no secrets.");
-});
-
-export const DoesNotFlagDispatchWithoutPrivilegeDeltaJudge = judge("DoesNotFlagDispatchWithoutPrivilegeDeltaJudge", async ({ criterion }) => {
-  return criterion("Does NOT report caller-controlled RCE for a workflow_dispatch where the job has no secrets, no elevated permissions, and no privilege delta over the caller.");
-});
-
-export const DoesNotFlagDispatchWithoutSinkJudge = judge("DoesNotFlagDispatchWithoutSinkJudge", async ({ criterion }) => {
-  return criterion("Does NOT report the workflow_dispatch trigger as a vulnerability when no caller-controlled input reaches a code-evaluating sink and no privileged impact exists.");
-});
-
-export const DoesNotFlagFirstPartyActionsJudge = judge("DoesNotFlagFirstPartyActionsJudge", async ({ criterion }) => {
-  return criterion("Does NOT flag actions/* or github/* tag references (e.g. actions/checkout@v4) as a security issue solely for using a tag rather than a SHA.");
-});
-
-export const DoesNotFlagHardcodedChoiceJudge = judge("DoesNotFlagHardcodedChoiceJudge", async ({ criterion }) => {
-  return criterion("Does NOT report the hardcoded choice/boolean/number input as a vulnerability when it is used only in if:, with:, or safely quoted env: contexts.");
-});
-
-export const DoesNotFlagMetadataOnlyPrTargetJudge = judge("DoesNotFlagMetadataOnlyPrTargetJudge", async ({ criterion }) => {
-  return criterion("Does NOT report the pull_request_target workflow as vulnerable; recognizes labeling/commenting on metadata without checkout or PR code execution is safe.");
-});
-
-export const DoesNotFlagNonInterpretingExpressionJudge = judge("DoesNotFlagNonInterpretingExpressionJudge", async ({ criterion }) => {
-  return criterion("Does NOT report the ${{ }} expression as an injection vulnerability when used only in if:, with:, or env: contexts that don't reinterpret the value.");
-});
-
-export const DoesNotFlagNonIssueJudge = judge("DoesNotFlagNonIssueJudge", async ({ criterion }) => {
-  return criterion("Does NOT report the workflow as a security finding and does NOT recommend changes as if a real vulnerability exists.");
-});
-
-export const DoesNotFlagPolicyGapsJudge = judge("DoesNotFlagPolicyGapsJudge", async ({ criterion }) => {
-  return criterion("Does NOT report missing branch protections, required reviewers, CODEOWNERS, or org-policy gaps as workflow vulnerabilities when the workflow itself creates no exploitable path.");
-});
-
-export const DoesNotFlagPublicReadOnlyMutableRefJudge = judge("DoesNotFlagPublicReadOnlyMutableRefJudge", async ({ criterion }) => {
-  return criterion("Does NOT flag mutable third-party action refs (tag or branch) in workflows with no secrets, no OIDC, no write-scoped tokens, and only public read-only data.");
-});
-
-export const DoesNotFlagSafeResolvedValueJudge = judge("DoesNotFlagSafeResolvedValueJudge", async ({ criterion }) => {
-  return criterion("Does NOT flag the expression as an injection vulnerability and does NOT recommend env+quoting as if it were a real RCE finding.");
-});
-
-export const DoesNotFlagSafeWorkflowJudge = judge("DoesNotFlagSafeWorkflowJudge", async ({ criterion }) => {
-  return criterion("Does not report this workflow as a pwn-request or code-execution vulnerability and does not invent an exploit chain.");
-});
-
-export const DoesNotFlagShellSafeChoiceRceJudge = judge("DoesNotFlagShellSafeChoiceRceJudge", async ({ criterion }) => {
-  return criterion("Does NOT call a hardcoded choice input used in a shell command an RCE or injection vulnerability when all options are shell-safe and no bypass is shown.");
-});
-
-export const DoesNotFlagUnreachedSecretsJudge = judge("DoesNotFlagUnreachedSecretsJudge", async ({ criterion }) => {
-  return criterion("Does NOT report the secret usage as a vulnerability when it is referenced only in a job that runs no attacker-controlled code and consumes no attacker-controlled artifacts.");
-});
-
-export const DoesNotFlagVagueResemblanceJudge = judge("DoesNotFlagVagueResemblanceJudge", async ({ criterion }) => {
-  return criterion("Does NOT report a vulnerability based on superficial pattern resemblance when no concrete exploit chain (trigger → attacker input → sink → impact) can be traced.");
-});
-
-export const DoesNotFlagYamlLintJudge = judge("DoesNotFlagYamlLintJudge", async ({ criterion }) => {
-  return criterion("Does NOT flag missing workflow/job/step names, YAML formatting, indentation, or generic actionlint-style style issues as security findings.");
-});
-
-export const DropsOrDowngradesUntraceableJudge = judge("DropsOrDowngradesUntraceableJudge", async ({ criterion }) => {
-  return criterion("Either drops the finding entirely or reports it at medium (or lower) confidence rather than asserting it as a confirmed vulnerability.");
-});
-
-export const ExplainsBarePullRequestSafeJudge = judge("ExplainsBarePullRequestSafeJudge", async ({ criterion }) => {
-  return criterion("Explains that pull_request grants only a read-only GITHUB_TOKEN with no secrets exposed to the fork-controlled code, so there is no privileged impact.");
-});
-
-export const ExplainsChoiceConstraintJudge = judge("ExplainsChoiceConstraintJudge", async ({ criterion }) => {
-  return criterion("Explains that GitHub enforces the choice option set so only the listed shell-safe values can reach the shell.");
-});
-
-export const ExplainsFalsePositiveTrapJudge = judge("ExplainsFalsePositiveTrapJudge", async ({ criterion }) => {
-  return criterion("Explains the specific false-positive trap (e.g. base-code checkout, intentional pull_request privilege, masking limits, choice input narrowing) accurately.");
-});
-
-export const ExplainsMissingChainJudge = judge("ExplainsMissingChainJudge", async ({ criterion }) => {
-  return criterion("Explains that the workflow lacks a traceable exploit chain — e.g. no attacker-controlled input reaches a sink, or the privileged trigger does not execute PR content.");
-});
-
-export const ExplainsNoExploitablePathJudge = judge("ExplainsNoExploitablePathJudge", async ({ criterion }) => {
-  return criterion("Explains that the dispatch input is benign because it does not flow into a code-evaluating sink, or returns a clean/no-finding result.");
-});
-
-export const ExplainsNonInterpretingContextJudge = judge("ExplainsNonInterpretingContextJudge", async ({ criterion }) => {
-  return criterion("Explains that if:, with:, and env: contexts evaluate the expression without shell interpretation, so the value is not a code-execution sink.");
-});
-
-export const ExplainsNoPrCodeExecutionJudge = judge("ExplainsNoPrCodeExecutionJudge", async ({ criterion }) => {
-  return criterion("Explains that the workflow never checks out, executes, or loads PR-controlled content, so pull_request_target is acceptable here.");
-});
-
-export const ExplainsNoSecurityIssueJudge = judge("ExplainsNoSecurityIssueJudge", async ({ criterion }) => {
-  return criterion("Communicates that no security vulnerability was found in the workflow, or returns an empty findings result.");
-});
-
-export const ExplainsOutOfScopeJudge = judge("ExplainsOutOfScopeJudge", async ({ criterion }) => {
-  return criterion("Explains that the construct is out of scope for exploit-oriented review (e.g. metadata-only, non-interpreting context, safe resolved value, no sink reached).");
-});
-
-export const ExplainsSafeResolvedValueJudge = judge("ExplainsSafeResolvedValueJudge", async ({ criterion }) => {
-  return criterion("Explains that the value resolves to a safe type (numeric ID, full SHA, boolean, or base-repo constant) and cannot carry shell metacharacters.");
-});
-
-export const ExplainsSecretNotReachableJudge = judge("ExplainsSecretNotReachableJudge", async ({ criterion }) => {
-  return criterion("Explains that the secret is not reachable by attacker- or caller-controlled inputs, or otherwise frames the workflow as not exploitable through that secret.");
-});
-
-export const ExplainsSeverityRationaleJudge = judge("ExplainsSeverityRationaleJudge", async ({ criterion }) => {
-  return criterion("Justifies the severity by referencing impact and exploitability (e.g., RCE, secret theft, required link, defense-in-depth) — not YAML shape.");
-});
-
-export const ExplainsTypeConstrainsValuesJudge = judge("ExplainsTypeConstrainsValuesJudge", async ({ criterion }) => {
-  return criterion("Explains that the input type (choice/boolean/number) constrains the value to a safe enumerated or non-string set, so no injection is possible.");
-});
-
-export const ExplainsWorkflowIsSafeJudge = judge("ExplainsWorkflowIsSafeJudge", async ({ criterion }) => {
-  return criterion("Explains the workflow is benign or low-risk on its own terms (e.g. no privileged trigger, no checkout of PR code, no secrets reaching attacker-controlled code).");
-});
-
-export const FlagsReinterpretedEnvJudge = judge("FlagsReinterpretedEnvJudge", async ({ criterion }) => {
-  return criterion("Flags as injection the case where an env: variable holding PR-controlled data is later interpolated into a run: shell command.");
-});
-
-export const FollowsReusableWorkflowJudge = judge("FollowsReusableWorkflowJudge", async ({ criterion }) => {
-  return criterion("Follows the uses: reference into the local/reusable callee workflow and analyzes its steps, not just the caller.");
-});
-
-export const FramesEnvQuotingAsHardeningJudge = judge("FramesEnvQuotingAsHardeningJudge", async ({ criterion }) => {
-  return criterion("If env: plus quoting is mentioned, frames it explicitly as defense-in-depth or hardening, not as a fix for an actual exploitable vulnerability.");
-});
-
-export const IdentifiesAIAgentPoisoningJudge = judge("IdentifiesAIAgentPoisoningJudge", async ({ criterion }) => {
-  return criterion("Identifies that PR-controlled agent instructions (AGENTS.md, CLAUDE.md, .cursorrules, copilot-instructions) can poison the agent's behavior in a privileged context.");
-});
-
-export const IdentifiesArtifactHandoffJudge = judge("IdentifiesArtifactHandoffJudge", async ({ criterion }) => {
-  return criterion("Identifies that the pull_request workflow uploads an attacker-controlled artifact that a later privileged workflow_run consumes, creating an exploit chain.");
-});
-
-export const IdentifiesAttackerControlledContextJudge = judge("IdentifiesAttackerControlledContextJudge", async ({ criterion }) => {
-  return criterion("Names the attacker- or caller-controlled GitHub context value (PR title/body, comment body, branch name, commit message, workflow_dispatch input, etc.) being interpolated.");
-});
-
-export const IdentifiesCachePoisoningJudge = judge("IdentifiesCachePoisoningJudge", async ({ criterion }) => {
-  return criterion("Identifies that cache contents or keys controlled by an untrusted PR can be restored into a privileged job and trusted/executed.");
-});
-
-export const IdentifiesChatopsTriggerJudge = judge("IdentifiesChatopsTriggerJudge", async ({ criterion }) => {
-  return criterion("Names issue_comment, discussion, or label as the externally-triggerable event that runs the workflow.");
-});
-
-export const IdentifiesCommentInjectionSinkJudge = judge("IdentifiesCommentInjectionSinkJudge", async ({ criterion }) => {
-  return criterion("Identifies that comment or discussion body text is interpolated into a shell run: step without safe env+quoting.");
-});
-
-export const IdentifiesCredentialExposureJudge = judge("IdentifiesCredentialExposureJudge", async ({ criterion }) => {
-  return criterion("Names the specific credential exposure vector (e.g., upload-artifact covering .git/, persisted checkout credentials, secrets written to logs/summaries).");
-});
-
-export const IdentifiesEntryPointJudge = judge("IdentifiesEntryPointJudge", async ({ criterion }) => {
-  return criterion("Explicitly names the entry point as external attacker, manual workflow_dispatch caller, or reusable workflow_call caller.");
-});
-
-export const IdentifiesExpressionInjectionSinkJudge = judge("IdentifiesExpressionInjectionSinkJudge", async ({ criterion }) => {
-  return criterion("Identifies the specific code-evaluating sink (run: block, github-script body, $GITHUB_ENV/$GITHUB_OUTPUT write, or -c/-e flag) where the expression is interpolated.");
-});
-
-export const IdentifiesMissingAuthGateJudge = judge("IdentifiesMissingAuthGateJudge", async ({ criterion }) => {
-  return criterion("Notes the absence of an author_association / team / approval check before the command executes.");
-});
-
-export const IdentifiesMissingLinkJudge = judge("IdentifiesMissingLinkJudge", async ({ criterion }) => {
-  return criterion("Names the specific missing piece of evidence (e.g. the referenced composite action, script, or external file) that prevents tracing the chain.");
-});
-
-export const IdentifiesMutableThirdPartyRefJudge = judge("IdentifiesMutableThirdPartyRefJudge", async ({ criterion }) => {
-  return criterion("Identifies the third-party action used at a mutable ref (tag or branch, not a 40-char commit SHA) as the issue.");
-});
-
-export const IdentifiesPrivilegedTriggerJudge = judge("IdentifiesPrivilegedTriggerJudge", async ({ criterion }) => {
-  return criterion("Names pull_request_target or privileged workflow_run as the trigger granting access to secrets or write tokens.");
-});
-
-export const IdentifiesScriptInjectionJudge = judge("IdentifiesScriptInjectionJudge", async ({ criterion }) => {
-  return criterion("Identifies the issue as script injection from inlining attacker-controlled ${{ github.event.* }} expressions into a shell run: block.");
-});
-
-export const IdentifiesSelfHostedRunnerAbuseJudge = judge("IdentifiesSelfHostedRunnerAbuseJudge", async ({ criterion }) => {
-  return criterion("Identifies that untrusted PR code reaches a self-hosted (especially persistent/non-ephemeral) runner, enabling runner compromise or persistence.");
-});
-
-export const IdentifiesTOCTOUJudge = judge("IdentifiesTOCTOUJudge", async ({ criterion }) => {
-  return criterion("Identifies the time-of-check vs time-of-use gap between the maintainer approval signal and the checkout resolving the latest PR head.");
-});
-
-export const IdentifiesTrustBoundaryJudge = judge("IdentifiesTrustBoundaryJudge", async ({ criterion }) => {
-  return criterion("Distinguishes base-repo trusted content from PR-controlled untrusted content and explains where the boundary is crossed.");
-});
-
-export const IdentifiesUnsafeCalleeJudge = judge("IdentifiesUnsafeCalleeJudge", async ({ criterion }) => {
-  return criterion("Identifies that the reusable workflow or local/composite action is the component executing PR-controlled input or unquoted untrusted input.");
-});
-
-export const IncludesCalleeFileReferenceJudge = judge("IncludesCalleeFileReferenceJudge", async ({ criterion }) => {
-  return criterion("References the callee file (the reusable workflow or composite action.yml) by path, not only the caller workflow.");
-});
-
-export const IncludesConcreteFixCodeJudge = judge("IncludesConcreteFixCodeJudge", async ({ criterion }) => {
-  return criterion("Remediation includes a concrete code patch (YAML/shell snippet) showing the safe shape, not just prose advice.");
-});
-
-export const IncludesConcreteFixPatchJudge = judge("IncludesConcreteFixPatchJudge", async ({ criterion }) => {
-  return criterion("Finding provides a concrete fix as a minimal workflow patch or diff, not just generic advice.");
-});
-
-export const IncludesFileAndLineJudge = judge("IncludesFileAndLineJudge", async ({ criterion }) => {
-  return criterion("Cites the specific workflow file path and the relevant step or trigger location.");
-});
-
-export const IncludesImpactAndConfidenceJudge = judge("IncludesImpactAndConfidenceJudge", async ({ criterion }) => {
-  return criterion("Finding describes the privileges/impact exposed and states confidence (high or medium) with a brief reason.");
-});
-
-export const IncludesTriggerInputAndExecutionJudge = judge("IncludesTriggerInputAndExecutionJudge", async ({ criterion }) => {
-  return criterion("Finding identifies the trigger/entry point, the attacker-controlled input, and the execution mechanism by which the input reaches a sink.");
-});
-
-export const PrefersLowerWhenUncertainJudge = judge("PrefersLowerWhenUncertainJudge", async ({ criterion }) => {
-  return criterion("When the exploit chain has unverified links, picks the lower severity tier and explicitly explains the uncertainty.");
-});
-
-export const RatesHighSeverityJudge = judge("RatesHighSeverityJudge", async ({ criterion }) => {
-  return criterion("Rates the finding HIGH or CRITICAL severity.");
-});
-
-export const RatesLowOrNoFindingJudge = judge("RatesLowOrNoFindingJudge", async ({ criterion }) => {
-  return criterion("Rates the workflow as low/informational or declines to report a finding, rather than calling it HIGH/CRITICAL caller-controlled RCE.");
-});
-
-export const RatesLowSeverityJudge = judge("RatesLowSeverityJudge", async ({ criterion }) => {
-  return criterion("Rates the finding LOW severity.");
-});
-
-export const RatesMediumSeverityJudge = judge("RatesMediumSeverityJudge", async ({ criterion }) => {
-  return criterion("Rates the finding MEDIUM severity.");
-});
-
-export const RecommendsCommitShaPinningJudge = judge("RecommendsCommitShaPinningJudge", async ({ criterion }) => {
-  return criterion("Recommends pinning the third-party action to a full 40-character commit SHA.");
-});
-
-export const RecommendsCredentialExposureFixJudge = judge("RecommendsCredentialExposureFixJudge", async ({ criterion }) => {
-  return criterion("Recommends a concrete fix such as scoping upload paths, disabling persist-credentials, narrowing permissions, or avoiding writing secrets to logs/artifacts.");
-});
-
-export const RecommendsEnvWithQuotingJudge = judge("RecommendsEnvWithQuotingJudge", async ({ criterion }) => {
-  return criterion("Recommends passing untrusted input through env: and referencing it with shell-quoted variables (e.g. printf '%s\\n' \"$VAR\") instead of inlining ${{ }} in run:.");
-});
-
-export const RecommendsSHAPinFromApprovalJudge = judge("RecommendsSHAPinFromApprovalJudge", async ({ criterion }) => {
-  return criterion("Recommends pinning checkout to the exact SHA captured at the moment of approval, not head_ref or a re-resolved head.sha.");
-});
-
-export const StatesNoFindingsAndListsReviewedJudge = judge("StatesNoFindingsAndListsReviewedJudge", async ({ criterion }) => {
-  return criterion("States explicitly that no findings were identified and lists the workflows or paths that were reviewed.");
-});
+import { criterionJudge } from "@sentry/skillet/evals";
+
+export const ClassifiesAttackerControlledJudge = criterionJudge("ClassifiesAttackerControlledJudge", "Classifies PR-derived fields (pull_request.title, head.ref, comment body, etc.) as attacker-controlled.");
+
+export const ClassifiesTrustedFieldJudge = criterionJudge("ClassifiesTrustedFieldJudge", "Classifies commit SHA, run id, or repository name as trusted / not attacker-controlled.");
+
+export const ConnectsCacheToExecutionJudge = criterionJudge("ConnectsCacheToExecutionJudge", "Traces that the restored cached content (deps, build outputs, node_modules, etc.) is later executed or loaded by the privileged job.");
+
+export const ConnectsExploitChainJudge = criterionJudge("ConnectsExploitChainJudge", "Ties the privileged caller trigger and attacker-controlled input through to the sink inside the resolved action or reusable workflow.");
+
+export const ConnectsPrivilegedContextJudge = criterionJudge("ConnectsPrivilegedContextJudge", "Ties the mutable pin to the privileged context (secrets, write token, OIDC, publish credentials, or self-hosted runner) that makes it exploitable.");
+
+export const ConnectsSecretExfilChainJudge = criterionJudge("ConnectsSecretExfilChainJudge", "Traces how the secret reaches an attacker-controlled or untrusted execution path, not just that a secret is present.");
+
+export const ConnectsTriggerToUntrustedContentJudge = criterionJudge("ConnectsTriggerToUntrustedContentJudge", "Ties the privileged trigger (pull_request_target/workflow_run) to the mechanism that introduces attacker-controlled code into the trusted job.");
+
+export const ConnectsUntrustedTriggerToOIDCJudge = criterionJudge("ConnectsUntrustedTriggerToOIDCJudge", "Traces how untrusted PR code, fork callers, or unauthenticated input reaches the job that mints the OIDC token.");
+
+export const DistinguishesControllabilityJudge = criterionJudge("DistinguishesControllabilityJudge", "Bases its findings on the controllability classification, flagging only the attacker-controlled field and not the trusted one.");
+
+export const DoesNotAssessSinksBeforeEnumerationJudge = criterionJudge("DoesNotAssessSinksBeforeEnumerationJudge", "Does not jump to step-level sink findings before completing the trigger and caller enumeration.");
+
+export const DoesNotAssumeActionSafeJudge = criterionJudge("DoesNotAssumeActionSafeJudge", "Does NOT declare the calling step safe or skip analysis of the invoked local/composite action or reusable workflow without inspecting its contents.");
+
+export const DoesNotEscalateDispatchToRCEJudge = criterionJudge("DoesNotEscalateDispatchToRCEJudge", "Does NOT escalate a plain workflow_dispatch input to RCE/High/Critical absent an identified external or lower-trust route to that input.");
+
+export const DoesNotFabricateExploitChainJudge = criterionJudge("DoesNotFabricateExploitChainJudge", "Does NOT invent an attacker-controlled input, checkout, or sink that is not present in the workflow file.");
+
+export const DoesNotFabricateExternalRouteJudge = criterionJudge("DoesNotFabricateExternalRouteJudge", "Does NOT invent an external or lower-trust route (e.g. issue_comment, PR, API) to the dispatch input that is not present in the workflow.");
+
+export const DoesNotFabricateSinkJudge = criterionJudge("DoesNotFabricateSinkJudge", "Does NOT invent or assume a sink, checkout of PR code, or attacker-controlled expression that is not actually present in the provided workflow.");
+
+export const DoesNotFlagBenignCacheJudge = criterionJudge("DoesNotFlagBenignCacheJudge", "Does NOT flag the workflow as cache poisoning when the cache is only populated and consumed within the same privileged context with no untrusted writer.");
+
+export const DoesNotFlagBroadPermissionsAloneJudge = criterionJudge("DoesNotFlagBroadPermissionsAloneJudge", "Does NOT report broad permissions or privileged trigger as a vulnerability when no traced attacker- or caller-controlled execution path exists.");
+
+export const DoesNotFlagConstrainedInputJudge = criterionJudge("DoesNotFlagConstrainedInputJudge", "Does NOT flag the hardcoded shell-safe choice/boolean input as an injection sink, RCE, or expression injection vulnerability.");
+
+export const DoesNotFlagEnvQuotedPatternJudge = criterionJudge("DoesNotFlagEnvQuotedPatternJudge", "Does NOT report expression injection or RCE on the env: + quoted \"$VAR\" usage in shell.");
+
+export const DoesNotFlagFirstPartyActionsJudge = criterionJudge("DoesNotFlagFirstPartyActionsJudge", "Does NOT flag actions/* or github/* official first-party actions pinned to a tag as a mutable-pin vulnerability.");
+
+export const DoesNotFlagOIDCInTrustedJobJudge = criterionJudge("DoesNotFlagOIDCInTrustedJobJudge", "Does NOT flag id-token: write as a vulnerability when the job is only reachable from trusted contexts (push to main, manual dispatch by maintainers) with no untrusted input path.");
+
+export const DoesNotFlagOutOfScopeAppVulnJudge = criterionJudge("DoesNotFlagOutOfScopeAppVulnJudge", "Does NOT report the standalone application vulnerability in the source file as a workflow finding, since the workflow does not load or execute that code.");
+
+export const DoesNotFlagPolicyGapJudge = criterionJudge("DoesNotFlagPolicyGapJudge", "Does NOT report missing branch protection, CODEOWNERS, or required-reviewer rules as a workflow vulnerability finding.");
+
+export const DoesNotFlagSanitizedWriteJudge = criterionJudge("DoesNotFlagSanitizedWriteJudge", "Does NOT flag the workflow command file write as vulnerable when the value is hardcoded, numeric, or otherwise not attacker-controlled.");
+
+export const DoesNotFlagStyleJudge = criterionJudge("DoesNotFlagStyleJudge", "Does NOT raise YAML style, missing name:, action pinning hygiene, or generic non-security best-practice nits as security findings.");
+
+export const DoesNotFlagTrustedFieldJudge = criterionJudge("DoesNotFlagTrustedFieldJudge", "Does NOT report github.sha, github.run_id, or github.repository as injection-controllable inputs.");
+
+export const DoesNotFlagWithoutTraceJudge = criterionJudge("DoesNotFlagWithoutTraceJudge", "Does NOT report a finding based merely on resemblance to a known pattern (e.g. presence of pull_request_target or a script: block) without tracing a concrete attacker-controlled trigger-to-sink path.");
+
+export const DoesNotInvokeNamedSkillJudge = criterionJudge("DoesNotInvokeNamedSkillJudge", "The agent's response does not instruct invoking another named skill (e.g. 'use the X skill', 'hand off to Y skill', 'load skill Z') at runtime.");
+
+export const DoesNotLoadIrrelevantReferencesJudge = criterionJudge("DoesNotLoadIrrelevantReferencesJudge", "Does NOT read references/ files unrelated to the patterns in the workflow (e.g., does not load chatops or OIDC references when only pull_request_target+checkout is present).");
+
+export const EnumeratesAllTriggersJudge = criterionJudge("EnumeratesAllTriggersJudge", "Lists every `on:` trigger declared in the workflow (e.g. pull_request_target, workflow_call, workflow_dispatch) before assessing any step.");
+
+export const EnumeratesReusableCallersJudge = criterionJudge("EnumeratesReusableCallersJudge", "Identifies callers/invokers of reusable workflows or composite actions referenced in the workflow under review.");
+
+export const ExplainsAbsenceOfSinkJudge = criterionJudge("ExplainsAbsenceOfSinkJudge", "Explains that no concrete attacker-controlled data flow into a dangerous sink was identified, rather than asserting a vulnerability from the trigger or syntax alone.");
+
+export const ExplainsConstrainedInputSafeJudge = criterionJudge("ExplainsConstrainedInputSafeJudge", "Explains that the choice/boolean input is constrained to hardcoded shell-safe values and therefore not exploitable on its own.");
+
+export const ExplainsEnvQuotedMitigationJudge = criterionJudge("ExplainsEnvQuotedMitigationJudge", "Explains that reading the value via env and using it as a quoted shell variable is the recommended safe mitigation.");
+
+export const ExplainsEnvQuotedSafeJudge = criterionJudge("ExplainsEnvQuotedSafeJudge", "Explains that reading via env: and using \"$VAR\" with quotes prevents expression injection because the value is a shell variable, not interpolated YAML.");
+
+export const ExplainsManualTrustBoundaryJudge = criterionJudge("ExplainsManualTrustBoundaryJudge", "Explains that workflow_dispatch requires maintainer/write access to trigger, so inputs are manual/caller-controlled and not a remote vector by default.");
+
+export const ExplainsNoExploitablePathJudge = criterionJudge("ExplainsNoExploitablePathJudge", "Explains that broad permissions or trigger type alone are not a finding without a traced trigger-to-sink path involving untrusted input.");
+
+export const ExplainsPolicyOutOfScopeJudge = criterionJudge("ExplainsPolicyOutOfScopeJudge", "Either stays silent on repo policy or explicitly notes that branch protection / CODEOWNERS / reviewer policy is out of scope for workflow exploit review.");
+
+export const ExplainsScopeBoundaryJudge = criterionJudge("ExplainsScopeBoundaryJudge", "Explains the audit is scoped to GitHub Actions exploitability and the application code is not loaded/executed by the workflow under review.");
+
+export const ExplainsSeverityByBlastRadiusJudge = criterionJudge("ExplainsSeverityByBlastRadiusJudge", "Justifies the severity by referencing the privileges reached (write token, secrets, publish, runner) rather than generic risk language.");
+
+export const FlagsAudienceOrSubjectClaimJudge = criterionJudge("FlagsAudienceOrSubjectClaimJudge", "Calls out the audience/subject (sub) claim trusted by the cloud role as needing scrutiny, or notes claims that are too permissive.");
+
+export const FlagsOverbroadPermissionWithPathJudge = criterionJudge("FlagsOverbroadPermissionWithPathJudge", "Flags the overbroad permission (e.g. contents: write or id-token: write) AS A FINDING because a traced attacker-controlled execution path can spend it.");
+
+export const IdentifiesAttackerControlledSourceJudge = criterionJudge("IdentifiesAttackerControlledSourceJudge", "Identifies the specific attacker-controlled input (e.g. PR title, issue body, commit message) flowing into the workflow command file write.");
+
+export const IdentifiesBrokenQuotingJudge = criterionJudge("IdentifiesBrokenQuotingJudge", "Identifies that the shell variable expansion is unquoted (or quoting is broken), enabling injection despite the env indirection.");
+
+export const IdentifiesCachePoisoningPathJudge = criterionJudge("IdentifiesCachePoisoningPathJudge", "Identifies that cache restore in a privileged job uses a key that can be populated by untrusted PR/fork runs, enabling cross-context cache poisoning.");
+
+export const IdentifiesChatopsTriggerJudge = criterionJudge("IdentifiesChatopsTriggerJudge", "Names issue_comment, pull_request_review, discussion_comment, or label-driven trigger as the entry point reachable by anyone who can comment.");
+
+export const IdentifiesCommentBodyShellInjectionJudge = criterionJudge("IdentifiesCommentBodyShellInjectionJudge", "Identifies that the comment body (or label/comment-derived value) is interpolated into a shell run step, enabling command injection.");
+
+export const IdentifiesExpressionInjectionJudge = criterionJudge("IdentifiesExpressionInjectionJudge", "Flags ${{ ... }} interpolation of attacker-controlled context (e.g. PR title, body, branch name) directly into a run: shell step as expression injection.");
+
+export const IdentifiesExternalRouteToInputJudge = criterionJudge("IdentifiesExternalRouteToInputJudge", "Identifies a concrete external or lower-trust route reaching the input (e.g. reusable workflow called from a pull_request workflow, repository_dispatch, or API exposure).");
+
+export const IdentifiesInjectionSinkJudge = criterionJudge("IdentifiesInjectionSinkJudge", "Identifies that a workflow_dispatch/workflow_call string input flows into a shell run:, tag, version, registry, or git sink.");
+
+export const IdentifiesMissingAuthorizationJudge = criterionJudge("IdentifiesMissingAuthorizationJudge", "Calls out the absence of an author_association or membership check (OWNER/MEMBER/COLLABORATOR) gating the privileged action.");
+
+export const IdentifiesMutableActionPinJudge = criterionJudge("IdentifiesMutableActionPinJudge", "Identifies that a third-party action is pinned to a branch or mutable tag (e.g. @main or @v1) rather than a commit SHA.");
+
+export const IdentifiesOIDCTokenMintingJudge = criterionJudge("IdentifiesOIDCTokenMintingJudge", "Identifies that the workflow mints a cloud OIDC token via id-token: write permission.");
+
+export const IdentifiesPRHeadCheckoutJudge = criterionJudge("IdentifiesPRHeadCheckoutJudge", "Identifies that the workflow checks out PR head code via github.event.pull_request.head.sha or head ref.");
+
+export const IdentifiesPrivilegedTriggerJudge = criterionJudge("IdentifiesPrivilegedTriggerJudge", "Names the privileged trigger (e.g. pull_request_target, issue_comment, pull_request) that exposes the injection sink.");
+
+export const IdentifiesPrivilegesExposedJudge = criterionJudge("IdentifiesPrivilegesExposedJudge", "States the privileges at risk: permissions scope, available secrets, or runner context exposed by the trigger.");
+
+export const IdentifiesScriptInjectionSinkJudge = criterionJudge("IdentifiesScriptInjectionSinkJudge", "Names actions/github-script (or equivalent JS/Python script action) as the sink where attacker-controlled expression interpolation yields code execution.");
+
+export const IdentifiesSecretSinkJudge = criterionJudge("IdentifiesSecretSinkJudge", "Names the specific secret (e.g. NPM_TOKEN, secrets.*) and the untrusted sink it flows into (PR-controlled code, log, artifact, or set-output to later step).");
+
+export const IdentifiesSelfHostedRunnerJudge = criterionJudge("IdentifiesSelfHostedRunnerJudge", "Identifies that the workflow uses a self-hosted runner as a key risk factor.");
+
+export const IdentifiesSinkInResolvedActionJudge = criterionJudge("IdentifiesSinkInResolvedActionJudge", "Identifies the actual sink (e.g. run: with attacker-controlled input) located inside the resolved local/composite action or reusable workflow, not just in the caller.");
+
+export const IdentifiesSupplyChainImpactJudge = criterionJudge("IdentifiesSupplyChainImpactJudge", "Notes supply-chain tampering or release-secret impact (publish, tag, registry, deploy) rather than treating it as a generic injection.");
+
+export const IdentifiesTrustBoundaryTransitionJudge = criterionJudge("IdentifiesTrustBoundaryTransitionJudge", "Calls out the specific transition where trusted context pulls in PR-controlled content (checkout ref, workflow_run download, or cache/artifact restore).");
+
+export const IdentifiesTrustContextPerJobJudge = criterionJudge("IdentifiesTrustContextPerJobJudge", "For each job, explicitly labels whether it runs in a trusted context (secrets/write token/base ref) or untrusted context (PR head/fork code).");
+
+export const IdentifiesUnsafeChoiceValueJudge = criterionJudge("IdentifiesUnsafeChoiceValueJudge", "Flags the choice input as unsafe specifically because one of its hardcoded values contains shell metacharacters or is concatenated with attacker-controlled data.");
+
+export const IdentifiesWorkflowCommandFileSinkJudge = criterionJudge("IdentifiesWorkflowCommandFileSinkJudge", "Names the write to $GITHUB_ENV, $GITHUB_OUTPUT, $GITHUB_PATH, or $GITHUB_STEP_SUMMARY as the injection sink.");
+
+export const IncludesFileLineJudge = criterionJudge("IncludesFileLineJudge", "Finding cites a specific file path and line number (or line range) for the vulnerable code.");
+
+export const IncludesSinkLocationJudge = criterionJudge("IncludesSinkLocationJudge", "Cites the specific run: step / file / line where the unsafe interpolation occurs as the sink.");
+
+export const LabelsTrustBoundaryJudge = criterionJudge("LabelsTrustBoundaryJudge", "Labels each trigger and caller as trusted or attacker/lower-trust controlled before discussing sinks.");
+
+export const LoadsMatchingReferenceJudge = criterionJudge("LoadsMatchingReferenceJudge", "Reads the reference file from references/ that matches the workflow pattern present (e.g., pwn-request reference for pull_request_target with PR checkout) before emitting findings.");
+
+export const RatesCriticalSeverityJudge = criterionJudge("RatesCriticalSeverityJudge", "Rates the finding CRITICAL severity given write-token RCE on default branch with secret/publish access.");
+
+export const RatesHighSeverityJudge = criterionJudge("RatesHighSeverityJudge", "Rates the finding HIGH or CRITICAL severity.");
+
+export const RatesLowSeverityJudge = criterionJudge("RatesLowSeverityJudge", "Rates the workflow_dispatch input issue LOW severity (or informational/note), not HIGH or CRITICAL.");
+
+export const RatesMediumSeverityJudge = criterionJudge("RatesMediumSeverityJudge", "Rates the finding MEDIUM severity for a read-only token leak or bounded artifact poisoning.");
+
+export const RatesSeverityWithExternalRouteJudge = criterionJudge("RatesSeverityWithExternalRouteJudge", "Calibrates severity based on whether an external/lower-trust route to the input exists; does not escalate plain workflow_dispatch to RCE without such a route.");
+
+export const RecommendsConcreteFixJudge = criterionJudge("RecommendsConcreteFixJudge", "Provides a concrete remediation such as env-var indirection, SHA pin, authorization gate, narrowed permissions, or ephemeral runner — not a vague 'review this'.");
+
+export const RecommendsEnvVarMitigationJudge = criterionJudge("RecommendsEnvVarMitigationJudge", "Recommends moving the attacker-controlled value into env: (or github.context for script actions) and using safe indirection instead of direct ${{ }} interpolation.");
+
+export const RecommendsEphemeralRunnerJudge = criterionJudge("RecommendsEphemeralRunnerJudge", "Recommends ephemeral runner guarantees (e.g., ephemeral self-hosted runners, isolation, or moving to GitHub-hosted) as remediation.");
+
+export const RecommendsShaPinJudge = criterionJudge("RecommendsShaPinJudge", "Recommends pinning the action to a full commit SHA as the remediation.");
+
+export const RecommendsTreatArtifactsAsUntrustedJudge = criterionJudge("RecommendsTreatArtifactsAsUntrustedJudge", "Recommends treating downloaded artifacts and upstream PR data as untrusted (e.g., do not execute, do not interpolate, isolate from secrets).");
+
+export const ReportsCleanWhenNoExploitJudge = criterionJudge("ReportsCleanWhenNoExploitJudge", "Concludes no security issues are present, or returns an empty/clean finding set, for a workflow that only has style imperfections.");
+
+export const ResolvesLocalActionJudge = criterionJudge("ResolvesLocalActionJudge", "Agent reads the referenced local action's action.yml (or composite/reusable workflow file) rather than assuming the step is safe based on the caller workflow alone.");
+
+export const StatesIntentDirectlyJudge = criterionJudge("StatesIntentDirectlyJudge", "The agent performs or describes the security review intent directly using its own capabilities rather than deferring to a named external skill.");
+
+export const VerifiesQuotingAndSinkJudge = criterionJudge("VerifiesQuotingAndSinkJudge", "Verifies the variable is properly quoted and consumed by shell (not eval/github-script/code) before clearing the pattern.");

@@ -1,0 +1,9 @@
+name: Local Package
+inputs:
+  tag:
+    required: true
+runs:
+  using: composite
+  steps:
+    - run: echo "Packaging ${{ inputs.tag }}"
+      shell: bash

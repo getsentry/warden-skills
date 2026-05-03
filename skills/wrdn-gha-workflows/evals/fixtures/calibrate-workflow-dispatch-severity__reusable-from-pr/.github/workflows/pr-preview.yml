@@ -1,0 +1,8 @@
+name: PR Preview
+on:
+  pull_request:
+jobs:
+  call-deploy:
+    uses: ./.github/workflows/reusable-deploy.yml
+    with:
+      target: ${{ github.event.pull_request.title }}

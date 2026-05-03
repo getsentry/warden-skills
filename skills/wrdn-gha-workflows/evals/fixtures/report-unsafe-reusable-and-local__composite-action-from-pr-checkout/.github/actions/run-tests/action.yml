@@ -1,8 +1,0 @@
-name: Run Tests
-description: Runs the test suite
-runs:
-  using: composite
-  steps:
-    - shell: bash
-      run: |
-        ./scripts/test.sh

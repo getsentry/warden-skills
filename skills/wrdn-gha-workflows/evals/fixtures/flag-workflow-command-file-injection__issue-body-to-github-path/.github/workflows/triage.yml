@@ -1,0 +1,13 @@
+name: Triage
+on:
+  issues:
+    types: [opened]
+jobs:
+  triage:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Extract path hint
+        run: |
+          echo "${{ github.event.issue.body }}" >> $GITHUB_PATH
+      - name: Build
+        run: make build

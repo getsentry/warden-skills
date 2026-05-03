@@ -1,0 +1,15 @@
+name: Label
+on:
+  pull_request_target:
+    types: [opened, edited]
+jobs:
+  label:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Capture title
+        run: |
+          echo "PR_TITLE=${{ github.event.pull_request.title }}" >> $GITHUB_ENV
+      - name: Use title
+        run: |
+          echo "Processing: $PR_TITLE"
+          eval "echo $PR_TITLE"

@@ -1,561 +1,148 @@
 ---
 name: wrdn-gha-workflows
-description: Detects exploitable GitHub Actions workflow vulnerabilities, including pull_request_target pwn requests, unsafe PR checkout, expression injection in run steps and actions/github-script blocks, workflow_dispatch and workflow_call input command injection, comment- and discussion-triggered commands, TOCTOU between approval and checkout, secret exposure, broad permissions, reusable workflows that consume undeclared secrets, ArtiPACKED-style token leaks through uploaded artifacts, cache poisoning and eviction-stuffing, supply-chain risk from unpinned third-party actions (tj-actions/changed-files class), and self-hosted runner abuse. Run on diffs touching .github/workflows, action.yml, action.yaml, repo-local actions, or CI-loaded scripts and config.
-allowed-tools: Read Grep Glob Bash
+description: >
+  Find exploitable GitHub Actions workflow defects where CI boundaries turn
+  untrusted or caller-controlled data into code execution, credential exposure,
+  repository mutation, package publication, release tampering, or runner
+  compromise. Trace the chain from trigger or caller to sink to privilege
+  before reporting; this is exploit review, not workflow style. Use when asked
+  to "audit these GitHub Actions workflows for security issues", "review this
+  pull_request_target workflow", "check this workflow for expression
+  injection", "look at the release workflow inputs for injection", "review the
+  reusable workflow secrets exposure", "scan these composite actions for
+  unsafe shell interpolation", "check GHA permissions and token scope on this
+  workflow", "find pwn_request style bugs in our CI", "review this
+  workflow_run handler for artifact poisoning", "is this chatops workflow
+  command-injection safe", or "audit our self-hosted runner workflow exposure".
 ---
 
-You are a senior application security engineer. You hunt GitHub Actions bugs that let an external attacker, or a workflow caller with less privilege than the job, turn CI into code execution, credential theft, repository write access, package publication, or runner compromise.
+<!--
+  Generated from spec.yaml. The behavior set, must-nots, and
+  triggers live in spec.yaml — edit there. `skillet improve` may
+  tune the prose in this file between runs to satisfy evals;
+  those tweaks survive until the spec itself changes.
+-->
 
-This skill is exploit-oriented. It is not a YAML linter. A privileged trigger by itself is not a finding. A broad `permissions:` block by itself is usually not a finding. The finding is the chain: external or caller-controlled input reaches privileged execution, a trusted credential, or a trusted runner.
+## Enumerate triggers and callers
 
-## Trace. Do Not Skim.
+Before assessing any step, list every `on:` event and every caller of each reusable workflow or composite action. Label each entry point as trusted (maintainer-only, base ref, target repo) or attacker-controlled (PR head, fork, comment, issue body, external dispatch). Exploitability begins at the trust boundary; without a labeled entry point, sink findings are unranked and frequently wrong about who can reach them.
 
-GitHub Actions bugs hide across files. Read the workflow, follow every `uses:`, and prove the effective execution graph before reporting.
+## Map trust boundaries per job
 
-- **Start with the trigger.** Identify whether an external attacker can start the workflow: fork PR, PR update, issue/PR/discussion comment, label event, `workflow_run` after untrusted work, or another public event. For `workflow_dispatch` and `workflow_call`, identify who can supply inputs and whether the job performs release, deploy, publish, signing, token, or runner-sensitive work.
-- **Map trust boundaries.** Separate base repository code from PR-controlled code, manual inputs, reusable workflow inputs, artifacts, caches, comments, titles, branch names, labels, and files loaded from the checked-out ref.
-- **Follow call boundaries.** Resolve local actions, composite actions, reusable workflows, and scripts called by `run:`. The dangerous behavior may sit in a callee while the privileged context is introduced by the caller.
-- **Track token and secret scope.** Read workflow- and job-level `permissions:`, `secrets:`, explicit PATs, deploy keys, OIDC credentials, package tokens, and checkout credential persistence.
-- **Verify execution.** Confirm attacker-controlled or caller-controlled code or text is interpreted by a shell, action, JS evaluator (`actions/github-script`), package lifecycle hook, script, config loader, cache restore, artifact consumer, or runner.
-- **Use the shell.** Use `rg` to find matching workflows, local actions, referenced scripts, reusable workflow calls, and sibling safe patterns. Use `git log -p` when a risky mitigation looks recently changed.
+For each job, record whether it executes in a trusted context (target repo secrets, write `GITHUB_TOKEN`, base ref code) or an untrusted context (PR head code, fork content). Mark every transition: `actions/checkout` with a PR head ref, `workflow_run` artifact downloads, cache/artifact restores from cross-context keys. Most GHA exploits hinge on a trusted context running PR-controlled content, so the boundary must be explicit before any sink is judged.
 
-If you cannot trace the chain with the files available, either drop the finding or report it as medium confidence with the exact missing link. Do not report vague resemblance.
+## Resolve local actions, reusable workflows, and scripts
 
-## Scope
+Open and read every `./path` action, composite action, `uses: ./.github/...` reference, `org/repo/.github/workflows/x.yml@ref` callee, and any script invoked from `run:`. Sinks are routinely hidden one or two indirections deep; declaring a step safe without reading what it actually executes produces false negatives and shallow reports.
 
-Review these files whenever they are present or referenced:
+## Flag expression injection in `run:`
 
-- `.github/workflows/*.yml` and `.github/workflows/*.yaml`
-- `.github/actions/**/action.yml` and `.github/actions/**/action.yaml`
-- repository-root `action.yml` and `action.yaml`
-- scripts, Makefiles, package manager commands, config files, and agent instruction files loaded by workflows
-- reusable workflows called with `uses: ./.github/workflows/...` or external `owner/repo/.github/workflows/file.yml@ref`
+Flag `${{ ... }}` interpolation of attacker-controlled fields — PR title and body, branch name, commit message, issue/comment/discussion body, label name, head ref, author fields — directly into `run:`, composite `run:`, or any shell step, as expression injection RCE in the surrounding context. This is the canonical `pwn_request`-style primitive; report it with the precise sink line and the trigger event that reaches it.
 
-External reusable workflows and third-party actions are in scope only to the extent visible from the caller unless their source is available in the workspace. Note unresolved trust assumptions instead of inventing details.
+## Flag script-action injection
 
-## References
+Flag interpolation of attacker-controlled expressions into `actions/github-script`, `actions/script`, or equivalent inline JS/Python bodies. The script body is evaluated as code, so `${{ }}` interpolation yields execution with the job's `GITHUB_TOKEN`. Recommend reading values via `env:` or the `context` argument instead of inline `${{ }}`.
 
-Load references only when the matching pattern appears.
+## Flag workflow-command-file injection
 
-| When | Read |
-|------|------|
-| `pull_request_target`, privileged PR events, or checkout of PR refs | `references/privileged-pr-context.md` |
-| `${{ }}` appears inside `run:`, composite-action shell steps, `actions/github-script`, `actions/script`, `workflow_dispatch` inputs, or `workflow_call` inputs | `references/expression-injection.md` |
-| `issue_comment`, PR comments, slash commands, labels, or chatops trigger execution, including approval-then-checkout flows | `references/comment-commands.md` |
-| `workflow_call`, `workflow_run`, local actions, composite actions, artifacts, or caches connect workflows | `references/reusable-and-indirect-flows.md` |
-| Secrets, PATs, deploy keys, OIDC, package publishing, broad `permissions:`, secret-bearing artifacts, persisted checkout credentials, or `actions/upload-artifact` paths that may include `.git/` appear | `references/permissions-secrets-runners.md` |
-| Third-party or external reusable-workflow refs are mutable (tag, branch, partial SHA), or the workflow handles secrets, package publishing, or trusted release artifacts | `references/supply-chain.md` |
-| You need examples, false-positive controls, sample Warden config, or eval prompts | `references/examples-and-usage.md` |
+Flag writes of attacker-controlled data to `$GITHUB_ENV`, `$GITHUB_OUTPUT`, `$GITHUB_PATH`, or `$GITHUB_STEP_SUMMARY` without sanitization. Trace whether a downstream step consumes the polluted variable in a privileged sink — newline-based injection in these files mutates env/PATH/outputs across steps and frequently escalates to RCE in a later trusted step.
 
-## Threat Model
+## Flag `pull_request_target` checking out PR head
 
-Prefer vulnerabilities exploitable by an external attacker without repository write access. Also report caller-controlled RCE in `workflow_dispatch` or `workflow_call` paths when the job has stronger privileges than the caller's ordinary repository rights, handles secrets, PATs, OIDC, package publishing, releases, deployments, or runs on a sensitive self-hosted runner.
+Flag any `pull_request_target` workflow that checks out PR head code (`ref: ${{ github.event.pull_request.head.sha }}`, head ref, or merge ref) and then runs build, test, install, lint, codegen, or any script from that checkout. This is the textbook `pwn_request` pattern: PR-controlled code executes with target repo secrets and the write token.
 
-For every finding, state the entry point explicitly: external attacker, manual `workflow_dispatch` caller, or reusable `workflow_call` caller.
+## Flag `workflow_run` artifact and PR-data trust
 
-An external attacker can usually:
+Flag privileged `workflow_run` jobs that download artifacts, read PR metadata, or check out PR head from the triggering run and then execute, evaluate, or interpolate that data. `workflow_run` runs with full target privileges, so trusting upstream artifacts or PR fields reintroduces the same exploit path as `pull_request_target`.
 
-- open a pull request from a fork
-- update that pull request
-- choose branch names, changed filenames, commit messages, PR titles, and PR bodies
-- create issues or comments if the repository permits it
-- upload code, package manifests, local actions, scripts, config, and artifacts through their PR
+## Flag cache-poisoning paths
 
-A manual or reusable workflow caller can usually:
+Flag privileged jobs that restore caches, dependency lockfiles, or build outputs whose keys can be populated by untrusted PR or fork runs, and trace whether the cached content is later executed. Cross-context cache restore turns an unprivileged PR run into a code-injection primitive against trusted jobs.
 
-- choose free-form `workflow_dispatch` string inputs
-- choose caller-provided `workflow_call` `with:` values
-- choose branch, ref, version, package, release, PR option, changed-file-list, and command-option inputs when the workflow exposes them
+## Flag mutable third-party action references
 
-The attacker or caller cannot usually:
+Flag third-party `uses:` references pinned to a branch or mutable tag (`@main`, `@v1`, `@master`) in any workflow that holds secrets, write tokens, OIDC, publish credentials, or self-hosted runners. Require a commit SHA pin: a mutable ref lets the action author or a tag-rewrite attack run arbitrary code in a privileged context.
 
-- push to protected branches
-- modify base-repository workflow files before approval
-- trigger `workflow_dispatch` in the base repository unless they have the repository or organization permission to do so
-- call internal reusable workflows unless an external trigger reaches them or the caller already has workflow permission
-- read secrets unless a workflow exposes them
+## Flag overbroad permissions only with a traced sink
 
-## Severity
+Flag `permissions:` grants — especially `contents: write`, `packages: write`, `id-token: write`, `pull-requests: write` — when paired with a traced attacker- or caller-controlled execution path. Permission scope is only a finding when an exploit can spend it; flagging broad permissions in isolation produces noise that buries real issues.
 
-| Level | Criteria |
-|-------|----------|
-| **high** | External attacker can execute code in a privileged workflow, steal secrets or write-scoped tokens, publish packages, push commits, tamper with releases, or compromise a non-ephemeral self-hosted runner. Also high: a manual or reusable workflow input lets the caller execute code in release, deploy, package-publish, signing, token-minting, production, PAT-backed, or sensitive self-hosted-runner jobs beyond what they can normally do. Also high: a third-party action on a mutable ref sits inside a release, deploy, package-publish, signing, or token-minting step where compromise of the action equals compromise of those credentials. |
-| **medium** | Attack chain is plausible but one link needs verification, exploit impact is bounded by read-only tokens, tightly scoped credentials, manual maintainer approval, or trusted repository users who can trigger the workflow but should not be able to run arbitrary shell under its tokens/secrets. Also medium: a third-party action on a mutable ref runs in a job that holds non-trivial secrets, OIDC, or write-scoped tokens. The tj-actions/changed-files compromise (CVE-2025-30066) is the standing reason: tag rewrites have already extracted secrets from 23,000+ repositories, so unpinned third-party actions in privileged jobs are an exploited shape, not a hypothetical. |
-| **low** | Defense-in-depth issue that amplifies another bug, such as unnecessarily broad permissions, or mutable refs in workflows that touch only public read-only data with no secrets. Report low only when it is directly adjacent to a reviewed workflow risk. First-party actions (`actions/*`, `github/*`) and actions vendored into the same repository are not findings on this axis by themselves. |
+## Flag secret and PAT exposure
 
-Pick the lower level when in doubt and explain the uncertainty.
+Flag steps that pass `secrets.*`, PATs, deploy keys, npm/PyPI/registry tokens, signing keys, or OIDC-derived credentials into untrusted code paths, log them, write them into artifacts, or expose them via `set-output`/env to later untrusted steps. The finding is the trace from the secret to the untrusted sink, not the mere presence of a secret.
 
-## What to Report
+## Flag OIDC misuse
 
-### Privileged PR context consumes PR-controlled code
+Flag workflows that mint cloud OIDC tokens (`id-token: write`) in jobs reachable by untrusted PR code, fork callers, or unauthenticated chatops. Check the audience and subject claims trusted by the cloud role: tokens issued from a compromised job grant cloud access, and a loose `sub` constraint extends blast radius beyond the repo.
 
-Report when `pull_request_target`, privileged `workflow_run`, or an equivalent trusted context checks out, builds, tests, imports, executes, or loads files from PR-controlled refs.
+## Flag self-hosted runner exposure
 
-High-signal shapes:
+Flag workflows on `self-hosted` runners that accept untrusted code paths — PR head checkout, untrusted `workflow_run`, comment-driven exec — without ephemeral runner guarantees. Self-hosted runners persist filesystem and process state, so one untrusted execution compromises every subsequent job scheduled on that runner.
 
-- `actions/checkout` with `ref: ${{ github.event.pull_request.head.sha }}` or `github.head_ref` in a `pull_request_target` workflow.
-- A trusted workflow runs package manager commands after checking out fork code: `npm install`, `npm test`, `pip install -e .`, `make`, `tox`, `pytest`, `cargo test`, `go test ./...`.
-- A local action, composite action, shell script, Makefile, or config file is loaded from the PR checkout while secrets or write tokens are available.
-- `actions/checkout` leaves credentials persisted before untrusted code runs.
-- A privileged `workflow_run` downloads and executes artifacts produced by an untrusted `pull_request` workflow.
+## Flag chatops without authorization
 
-### Expression injection in shell and script sinks
+Flag `issue_comment`, `pull_request_review`, `pull_request_review_comment`, `discussion_comment`, and label-driven workflows that dispatch privileged actions without an explicit author association or membership check (`OWNER`, `MEMBER`, `COLLABORATOR`). Flag any that interpolate comment bodies into shell. These triggers default to anyone on the internet who can comment; missing authorization plus shell interpolation is a remote RCE primitive.
 
-Report when attacker-controlled or caller-controlled GitHub context is interpolated directly into a code-evaluating sink in an externally triggerable, manual, or reusable workflow.
+## Flag release and publish input injection
 
-Sinks to treat as code execution:
+In release, deploy, publish, and PR-creation workflows, flag `workflow_dispatch` and `workflow_call` free-form `string` inputs that flow into `run:`, tag names, version strings, registry commands, or git operations. Assess RCE and supply-chain tampering: release pipelines hold the strongest secrets, so even caller-controlled inputs become high-impact when they reach shell or publish sinks.
 
-- `run:` blocks and composite-action shell steps
-- `actions/github-script` and `actions/script` `script:` bodies (JavaScript `eval`-equivalent; CVE-2026-27701 LiveCode used this exact path)
-- inline `python -c`, `node -e`, `bash -c`, `sh -c`, `ruby -e`, or any flag that hands a string to an interpreter
-- `echo "...${{ x }}..." >> $GITHUB_OUTPUT`, `>> $GITHUB_ENV`, `>> $GITHUB_STEP_SUMMARY`, or `>> $GITHUB_PATH` when the expression is attacker-controlled (the line is parsed by GitHub before later steps consume it; getsentry 0898b3d8 fixed exactly this)
-- `${{ inputs.* }}` or `${{ github.event.inputs.* }}` interpolated directly into shell or script in `workflow_dispatch` or `workflow_call` release, deploy, publish, bump-version, tagging, PR-creation, secret-bearing, or token-bearing jobs. This is highest signal for free-form `string` inputs. Warden PR #277 hardened `npx semver -i ${{ inputs.bump }} $CURRENT`; sentry c50c92f fixed the more clearly injectable `gh pr create --fill ${{ inputs.pr_options }}` free-form option case.
-- `${{ inputs.* }}` interpolated into shell or script inside a composite action that is reachable from an externally triggerable caller (sentry e93ee1ce pulled this out of `setup-devservices`)
+## Calibrate `workflow_dispatch` severity
 
-Attacker-controlled values include PR title, PR body, issue title, issue body, comment body, review body, discussion title, discussion body, branch names, changed filenames, labels, commit messages, wiki page names, and any action outputs, environment variables, or workflow inputs derived from those values. Manual and reusable workflow inputs are caller-controlled too; free-form string inputs are untrusted in shell and script sinks even when only repository users can trigger them. Numeric IDs, full commit SHAs, repository names, booleans, hardcoded `choice` options, and values created by the base workflow are usually not injectable unless later code reinterprets them unsafely.
+Treat `workflow_dispatch` and `workflow_call` as manual or caller-controlled by default. Raise severity only when an external or lower-trust route reaches the input — a reusable workflow called from a public-trigger workflow, `repository_dispatch` exposed via API, or a chained call from an untrusted context. This prevents false-positive RCE reports on inputs that only a maintainer can supply.
 
-### Comment, label, or chatops command execution
+## Treat `choice` inputs as hardening
 
-Report when an `issue_comment`, label, discussion, or chatops workflow lets untrusted users trigger commands without an authorization gate, or uses comment/body text in a shell or script command without safe quoting. CVE-2025-53104 (gluestack-ui) shipped a discussion-title shell injection. Discussion events are not a quiet corner.
+Treat hardcoded shell-safe `choice` and `boolean` inputs as hardening, not as automatic injection sinks. Only flag a `choice` when one of its values is itself shell-unsafe, or when the value is concatenated with attacker-controlled data downstream. Constrained inputs are not exploitable on their own, and reporting them as RCE wastes reviewer trust.
 
-Acceptable gates include `author_association` checks for `MEMBER`, `OWNER`, or `COLLABORATOR`, explicit team membership validation through GitHub API, or a required approval flow before command execution.
+## Investigate context fields for controllability
 
-Also report TOCTOU between approval and checkout. A maintainer comments `/ok-to-test` (or labels the PR), the workflow then resolves `pull_request.head.sha` or `head_ref` at execution time; the attacker pushes a new commit between the approval and the checkout, and the privileged job runs unreviewed code. The fix is to pin the checkout to the SHA the maintainer actually approved (commonly the SHA captured at approval time, embedded in the label name or comment body, or fetched from the PR head and recorded into a deployment), not to whatever `head.sha` resolves to when the job starts.
+For each `${{ github.* }}` and `${{ inputs.* }}` field on a sink path, classify it as attacker-controlled (PR fields, head ref, comment body, issue body, label name), caller-controlled (reusable workflow input from a known caller), or trusted (commit SHA, run id, repository name, base ref). Findings depend on this classification — not every context field is dangerous, and naming the class is what separates a real injection from noise.
 
-### Credential exposure and permission amplification
+## Check the `env:` + quoted-shell mitigation
 
-Report when untrusted execution can access:
+When an attacker-controlled value is read via `env:` and consumed as `"$VAR"` in shell, do not report expression injection on that path. Verify that quoting is intact and word-splitting is not reintroduced (no unquoted use, no `eval`, no re-interpolation into another `${{ }}`) before clearing it. The `env:` + quoted-variable shape is the standard mitigation; flagging it produces false positives that erode trust.
 
-- `secrets.*`, PATs, deploy keys, package registry tokens, cloud credentials, or OIDC token minting
-- `GITHUB_TOKEN` with write scopes relevant to the attack
-- checkout credentials persisted to the repo before untrusted commands run
-- broad workflow permissions that convert a moderate bug into repository, release, package, or issue/PR write access
-- derived secrets written to logs, summaries, files, caches, or artifacts where GitHub masking no longer protects them
-- OIDC trust policies broad enough for untrusted refs or workflows to assume cloud roles
-- `actions/upload-artifact` whose `path:` is `.`, `./`, the workspace root, or any directory that may contain `.git/` while a prior `actions/checkout` left credentials persisted (ArtiPACKED). Public-repo artifacts are world-readable; the persisted `GITHUB_TOKEN` in `.git/config` walks out the front door. The same shape applies to artifacts that capture full home directories, full `~/.docker/config.json`, full `~/.npmrc`, or full `~/.gitconfig` after a credential helper wrote to them.
-
-Permissions are an amplifier. Tie them to the exploit path.
-
-### Unsafe reusable workflows and local actions
-
-Report when a reusable workflow or local/composite action hides the dangerous half of the chain:
+## Report with full trace and concrete fix
 
-- caller is externally triggerable or privileged, callee executes PR-controlled inputs
-- caller passes secrets to a callee that checks out or runs untrusted refs
-- callee uses untrusted inputs in shell without quoting or validation
-- local action files are sourced from an attacker-controlled checkout
-- third-party or local actions download and execute mutable remote code at runtime
-- a reusable workflow (`on: workflow_call:`) references `${{ secrets.X }}` for any `X` other than `GITHUB_TOKEN` without declaring `X` under its own `secrets:` map. The workflow only functions because callers use `secrets: inherit`. Callers that pass secrets explicitly silently break, and reviewers cannot see the secret surface from the callee file alone (getsentry #19582 fixed this on `select-sentry-tests`).
-- a reusable workflow has no top-level or job-level `permissions:` block. It then inherits whatever the caller granted, which routinely over-scopes the callee (getsentry #19634 on selective testing). Report when the callee performs operations whose required scope is narrower than the caller's grant.
+Every finding must include: file:line, the trigger or caller entry point, the attacker- or caller-controlled input, the execution mechanism (sink), the privileges exposed (permissions, secrets, runner type), impact, confidence, and a concrete fix — env-var pattern, SHA pin, authorization gate, permission narrowing, ephemeral runner, audience/subject tightening. Reviewers need an exploit chain and a remediation, not a vague risk label.
 
-### AI agent config poisoning through CI
-
-Report when a workflow runs an AI coding or review agent on PR-controlled content in a privileged context, especially when the PR can modify project-level instructions or agent config such as `AGENTS.md`, `CLAUDE.md`, `.cursorrules`, `.github/copilot-instructions.md`, or tool-specific prompt files.
+## Calibrate severity by privilege and reach
 
-High-signal shapes:
+Calibrate severity by the privileges the exploit actually reaches:
 
-- `pull_request_target` checks out fork code and runs an AI agent action with write permissions or secrets.
-- The workflow allows non-write users to trigger the agent, for example `allowed_non_write_users: '*'`.
-- The agent can write files, run shell commands, commit, approve, label, or comment while reading PR-controlled instructions.
-- CODEOWNERS or explicit approval does not protect agent instruction files before the privileged agent consumes them.
-
-### Cache, artifact, and self-hosted runner abuse
-
-Report when attacker-controlled cache keys, cache contents, or artifacts are restored into privileged jobs and then executed, trusted, or used to publish results. Report self-hosted runner use when untrusted code can execute on a persistent or sensitive runner. The two cache shapes that have already been weaponized are PR-write/privileged-read on a shared scope, and the 10 GiB eviction-and-replace pattern (Angular dev-infra). See `references/permissions-secrets-runners.md` and `references/reusable-and-indirect-flows.md`.
-
-### Supply-chain risk from action references
-
-Report mutable third-party action references that sit in privileged jobs. CVE-2025-30066 (tj-actions/changed-files) and CVE-2025-30154 (reviewdog/action-setup) demonstrated tag rewrites at scale. When `uses:` resolves to anything other than a 40-character commit SHA on a third-party owner, treat the action's owner and every artifact it fetches at runtime as people who can take over the job. Drop the finding for first-party `actions/*`, `github/*`, and actions vendored into the same repository. See `references/supply-chain.md` for severity tiers and the specific shapes (mutable refs, runtime payload downloads, workspace-loaded action paths).
-
-## What NOT to Report
-
-- Generic workflow formatting, actionlint issues, missing names, or YAML style.
-- `pull_request_target` that only labels, comments, or reads metadata and never checks out, executes, or loads PR-controlled content.
-- Plain `pull_request` workflows with read-only default token and no secrets, unless they hand unsafe artifacts to a later privileged workflow.
-- `${{ }}` expressions in `if:`, `with:`, or job/step-level `env:` unless a receiving action or later shell execution reinterprets the value unsafely.
-- Expressions that resolve only to numeric IDs, full SHAs, booleans, or base-repository constants.
-- `workflow_dispatch`, `workflow_call`, `schedule`, or protected-branch `push` risks with no caller-controlled input reaching a code-evaluating sink and no privileged impact.
-- Manual inputs with hardcoded `choice`, `boolean`, `number`, or `environment` types used only in `if:`, `with:`, safely quoted `env:` variables, or other non-interpreting contexts.
-- Hardcoded `choice` inputs whose complete option set is shell-safe, even if directly interpolated into a command, unless another path can supply arbitrary values or the command reinterprets the option as code. Recommend `env:` plus quoting as hardening, but do not call it RCE without the bypass.
-- Mutable third-party action refs in workflows that handle no secrets, no OIDC, no write-scoped tokens, and only act on public read-only data. First-party `actions/*` and `github/*` references on a tag are not findings.
-- Secrets referenced only in jobs that do not run attacker/caller-controlled code or consume attacker-controlled artifacts.
-- Missing branch protections, required reviewers, CODEOWNERS, or organization policy gaps unless the workflow itself creates an exploitable path.
-
-## False-Positive Traps
-
-1. **Default checkout under `pull_request_target` checks out base code.** It may be broken for testing PRs, but it is not the pwn-request bug unless the workflow explicitly materializes PR-controlled code or artifacts.
-2. **`pull_request` is intentionally less privileged for forks.** Do not treat it like `pull_request_target` unless the repo overrides token/secrets behavior or the PR is from a same-repo branch.
-3. **`persist-credentials: false` helps but does not erase secrets.** If other secrets or write tokens are in the environment, continue tracing.
-4. **`permissions: read-all` is usually not exploitable by itself.** It can still matter if the workflow can leak private source or read package metadata.
-5. **Reusable workflows inherit context intentionally.** The issue is secret or token exposure combined with untrusted inputs, not reuse itself.
-6. **Artifact upload from untrusted CI is normal.** The bug is privileged downstream execution or trust of that artifact without validation.
-7. **Self-hosted runners are not always public.** Confirm external PRs can reach the runner before reporting.
-8. **GitHub masks exact secret values, not transformations.** A workflow that base64-encodes, truncates, archives, or writes secrets to files can still leak them.
-9. **A maintainer approval is not a SHA pin.** A workflow that resolves `pull_request.head.sha` after an `/ok-to-test`-style approval gate runs whatever the attacker pushed last, not what the maintainer reviewed. Trace the actual ref the privileged job uses.
-10. **`secrets: inherit` masks the secret surface.** A reusable workflow that references `secrets.X` without declaring it appears to "just work" through `inherit`. The bug is the undeclared secret, not the inheritance.
-11. **`workflow_dispatch` is not external by default.** Do not call it fork-exploitable unless a public path triggers it. Report it as manual/caller-controlled, calibrate severity to the caller and job privilege, and still flag arbitrary command execution in release or secret-bearing jobs.
-12. **`env:` is not magic.** The fix is `env:` plus native shell/script variable access and safe quoting or validation. `echo '${{ env.BODY }}'` is still expression injection.
-13. **`choice` inputs narrow the exploit.** A direct `${{ inputs.bump }}` in `run:` is still poor shell hygiene, but `type: choice` with only `minor`, `patch`, and `major` is not the same as free-form command injection. Verify whether API dispatch, a caller workflow, or a later refactor can bypass the finite set before reporting.
-
-## Canonical Patterns
-
-### Pattern: Pwn request through explicit PR checkout
-
-**GitHub Actions - bad:**
-
-```yaml
-on: pull_request_target
-permissions: write-all
-jobs:
-  test:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event.pull_request.head.sha }}
-      - run: npm install
-      - run: npm test
-```
-
-The fork controls package scripts and test code while the job has trusted-repository permissions.
-
-**GitHub Actions - safe:**
-
-```yaml
-on: pull_request
-permissions:
-  contents: read
-jobs:
-  test:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          persist-credentials: false
-      - run: npm ci
-      - run: npm test
-```
-
-Run untrusted code in an unprivileged PR workflow. Use a separate `workflow_run` job for trusted reporting, and treat artifacts as untrusted data.
-
-### Pattern: Shell expression injection
-
-**GitHub Actions - bad:**
-
-```yaml
-on: pull_request
-jobs:
-  lint:
-    runs-on: ubuntu-latest
-    steps:
-      - run: echo "Checking ${{ github.event.pull_request.title }}"
-```
-
-A PR title can break out of the shell string.
-
-**GitHub Actions - safe:**
-
-```yaml
-on: pull_request
-jobs:
-  lint:
-    runs-on: ubuntu-latest
-    steps:
-      - env:
-          PR_TITLE: ${{ github.event.pull_request.title }}
-        run: printf '%s\n' "$PR_TITLE"
-```
-
-Pass untrusted strings through environment variables and quote them in the shell.
-
-### Pattern: Manual workflow input command injection
-
-**GitHub Actions - bad:**
-
-```yaml
-on:
-  workflow_dispatch:
-    inputs:
-      bump:
-        type: string
-        required: true
-permissions:
-  contents: write
-jobs:
-  release:
-    runs-on: ubuntu-latest
-    steps:
-      - run: |
-          CURRENT=$(node -p "require('./package.json').version")
-          NEW=$(npx semver -i ${{ inputs.bump }} $CURRENT)
-```
-
-The manual caller controls `inputs.bump`; GitHub expands it into the temporary shell script before execution. In a release job, that is arbitrary command execution under release workflow privileges.
-
-**GitHub Actions - safe:**
-
-```yaml
-on:
-  workflow_dispatch:
-    inputs:
-      bump:
-        type: choice
-        required: true
-        options: [major, minor, patch, prerelease]
-permissions:
-  contents: write
-jobs:
-  release:
-    runs-on: ubuntu-latest
-    steps:
-      - env:
-          BUMP: ${{ inputs.bump }}
-        run: |
-          case "$BUMP" in
-            major|minor|patch|prerelease) ;;
-            *) exit 1 ;;
-          esac
-          CURRENT=$(node -p "require('./package.json').version")
-          NEW=$(npx semver -i "$BUMP" "$CURRENT")
-```
-
-Constrain the input when the domain is finite, pass it through `env:`, and quote it at the shell use site.
-
-### Pattern: Unauthorized comment command
-
-**GitHub Actions - bad:**
-
-```yaml
-on: issue_comment
-jobs:
-  deploy-preview:
-    if: contains(github.event.comment.body, '/deploy')
-    runs-on: ubuntu-latest
-    steps:
-      - run: ./ci/deploy-preview.sh "${{ github.event.comment.body }}"
-```
-
-Any commenter can trigger privileged deployment logic.
-
-**GitHub Actions - safe:**
-
-```yaml
-on: issue_comment
-jobs:
-  deploy-preview:
-    if: >
-      contains(github.event.comment.body, '/deploy') &&
-      contains(fromJSON('["MEMBER","OWNER","COLLABORATOR"]'), github.event.comment.author_association)
-    permissions:
-      contents: read
-      pull-requests: write
-    runs-on: ubuntu-latest
-    steps:
-      - env:
-          COMMENT_BODY: ${{ github.event.comment.body }}
-        run: ./ci/deploy-preview.sh "$COMMENT_BODY"
-```
-
-Authorization and shell quoting both matter.
-
-### Pattern: Python workflow script executes untrusted config
-
-**Python - bad:**
-
-```python
-import yaml
-from pathlib import Path
-from subprocess import run
-
-config = yaml.safe_load(Path("ci.yml").read_text())
-run(config["post_check"], shell=True, check=True)
-```
-
-If `ci.yml` came from a fork checkout in a privileged workflow, the script is a command-execution sink.
-
-**Python - safe:**
-
-```python
-import yaml
-from pathlib import Path
-from subprocess import run
-
-allowed = {"lint": ["npm", "run", "lint"], "test": ["npm", "test"]}
-config = yaml.safe_load(Path("ci.yml").read_text())
-run(allowed[config["task"]], check=True)
-```
-
-Use an allowlist and argv arrays. Do not execute repo-controlled strings.
-
-### Pattern: ArtiPACKED token leak through artifact upload
-
-**GitHub Actions - bad:**
-
-```yaml
-- uses: actions/checkout@v4
-- run: ./build.sh
-- uses: actions/upload-artifact@v4
-  with:
-    name: build-output
-    path: .
-```
-
-`actions/checkout` left `GITHUB_TOKEN` in `.git/config`. The workspace-root upload publishes the token in a public-repo artifact.
-
-**GitHub Actions - safe:**
-
-```yaml
-- uses: actions/checkout@v4
-  with:
-    persist-credentials: false
-- run: ./build.sh
-- uses: actions/upload-artifact@v4
-  with:
-    name: build-output
-    path: dist/
-```
-
-Disable credential persistence and upload only the directory you mean to publish.
-
-### Pattern: actions/github-script expression injection
-
-**GitHub Actions - bad:**
-
-```yaml
-on: issue_comment
-jobs:
-  triage:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/github-script@v7
-        with:
-          script: |
-            const title = "${{ github.event.issue.title }}";
-            await github.rest.issues.createComment({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              issue_number: context.issue.number,
-              body: `Triaged: ${title}`,
-            });
-```
-
-The issue title is concatenated into JavaScript source before evaluation. A title containing `"); maliciousCode(); ("` runs in the action's Node context with the `github` token. CVE-2026-27701 (LiveCode) shipped this exact shape on PR titles.
-
-**GitHub Actions - safe:**
-
-```yaml
-on: issue_comment
-jobs:
-  triage:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/github-script@v7
-        env:
-          ISSUE_TITLE: ${{ github.event.issue.title }}
-        with:
-          script: |
-            const title = process.env.ISSUE_TITLE;
-            await github.rest.issues.createComment({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              issue_number: context.issue.number,
-              body: `Triaged: ${title}`,
-            });
-```
-
-Pass untrusted strings through `env:` and read them with `process.env`. The expression is no longer evaluated as code.
-
-### Pattern: Reusable workflow consumes undeclared secrets
-
-**GitHub Actions - bad:**
-
-```yaml
-on:
-  workflow_call:
-    inputs:
-      target:
-        type: string
-        required: true
-
-jobs:
-  run:
-    runs-on: ubuntu-latest
-    steps:
-      - run: ./bin/deploy "$TARGET"
-        env:
-          TARGET: ${{ inputs.target }}
-          DEPLOY_KEY: ${{ secrets.DEPLOY_KEY }}
-```
-
-The callee uses `secrets.DEPLOY_KEY` without declaring it under `workflow_call.secrets`. The workflow only runs when the caller writes `secrets: inherit`; the secret surface is invisible to anyone reading this file.
-
-**GitHub Actions - safe:**
-
-```yaml
-on:
-  workflow_call:
-    inputs:
-      target:
-        type: string
-        required: true
-    secrets:
-      DEPLOY_KEY:
-        required: true
-
-jobs:
-  run:
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-    steps:
-      - run: ./bin/deploy "$TARGET"
-        env:
-          TARGET: ${{ inputs.target }}
-          DEPLOY_KEY: ${{ secrets.DEPLOY_KEY }}
-```
-
-Declare every consumed secret. Pin `permissions:` so the callee does not silently inherit caller scope.
-
-### Pattern: TypeScript action runs untrusted input
-
-**TypeScript - bad:**
-
-```ts
-import * as core from '@actions/core';
-import {execSync} from 'node:child_process';
-
-const target = core.getInput('target');
-execSync(`make ${target}`, {stdio: 'inherit'});
-```
-
-If a workflow passes PR-controlled text into `target`, the composite or JavaScript action becomes the shell sink.
-
-**TypeScript - safe:**
-
-```ts
-import * as core from '@actions/core';
-import {execFileSync} from 'node:child_process';
-
-const target = core.getInput('target');
-if (!/^[a-z0-9_-]+$/i.test(target)) {
-  throw new Error('invalid target');
-}
-execFileSync('make', [target], {stdio: 'inherit'});
-```
-
-Validate action inputs and avoid shell interpolation.
-
-## Output Requirements
-
-For every finding, include:
-
-- **File and line**: exact workflow, action, script, or config location
-- **Entry point**: how the external attacker reaches the workflow, or which manual/reusable caller can supply inputs
-- **Controlled input**: PR ref, artifact, cache, comment, branch, title, file, config, `workflow_dispatch` input, or `workflow_call` input
-- **Execution mechanism**: checkout, shell expression, script, package lifecycle, local action, artifact restore, or runner
-- **Privileges exposed**: secrets, token scopes, OIDC, package publishing, runner access, or repository write
-- **Impact**: what the attacker or caller can do
-- **Confidence**: high or medium, with the reason
-- **Fix**: concrete change, preferably a minimal workflow patch
-
-If there are no findings, say that no exploitable GitHub Actions workflow vulnerabilities were identified and list the workflows or paths reviewed.
+| Severity | Reach |
+|---|---|
+| Critical | Write-token RCE on default branch, secret exfiltration, package publish, signing-key access, self-hosted runner takeover |
+| High | Repo mutation (push, PR merge, release create), release tampering, OIDC token to broad cloud role |
+| Medium | Read-token leak, bounded artifact poisoning, cache poisoning into a non-publish job |
+| Low | Hardening gap with no traced sink (kept only when explicitly requested) |
+
+Severity must reflect blast radius; uniform severity collapses signal.
+
+## Reference loading
+
+Read the matching reference from `references/` before producing findings in that area. Load conditionally — only the patterns actually present in the workflows under review.
+
+| Load when | Read |
+|---|---|
+| Workflow uses `pull_request_target`, `workflow_run`, or consumes PR head code/artifacts/metadata in a trusted context | `references/pull-request-target-and-workflow-run.md` |
+| Any step uses `${{ }}` in `run:`, composite `run:`, `actions/github-script`/`actions/script`, or writes to `$GITHUB_ENV`/`$GITHUB_OUTPUT`/`$GITHUB_PATH` | `references/expression-injection-sinks.md` |
+| Workflow triggers on `issue_comment`, `pull_request_review`, `pull_request_review_comment`, `discussion`, `discussion_comment`, or label/assignee events that dispatch privileged actions | `references/chatops-and-comment-triggers.md` |
+| Workflow defines `workflow_call`/`workflow_dispatch`, is called by another workflow, or runs release/publish/PR-creation logic driven by inputs | `references/reusable-and-dispatch-inputs.md` |
+| Workflow uses `secrets.*`, sets `id-token: write`, publishes packages, signs releases, or pushes to remote registries | `references/secrets-oidc-and-tokens.md` |
+| Workflow uses `self-hosted` runners, third-party `uses:` references, or restores caches/artifacts crossing trust boundaries | `references/runners-actions-and-supply-chain.md` |
+| Before producing findings, or whenever uncertain whether a pattern is exploitable or merely non-ideal | `references/false-positive-traps.md` |
+
+## Don't
+
+- Don't report YAML formatting, missing `name:`, generic actionlint style, or non-security best practices — this is exploit review and style noise drowns real findings.
+- Don't report broad `permissions:` or privileged triggers without a traced attacker- or caller-controlled execution path; permission breadth alone is not an exploit.
+- Don't report findings based on resemblance to a known pattern — require a concrete trigger-to-sink trace, otherwise the report is unranked and unactionable.
+- Don't claim RCE on `choice` or `boolean` inputs whose values are hardcoded and shell-safe; constrained inputs are not exploitable on their own.
+- Don't claim expression injection when the attacker value is read via `env:` and consumed as a quoted shell variable, unless quoting is broken or the value reaches a non-shell sink (`eval`, code, `github-script`); that pattern is the recommended mitigation.
+- Don't report standalone application vulnerabilities outside CI unless the vulnerable code is loaded or executed by the workflow under review.
+- Don't report missing branch protection, CODEOWNERS, or required-reviewer rules as workflow findings unless the workflow itself creates the exploitable path; repo policy is out of scope.
+- Don't declare a step safe without resolving and reading the local action, composite action, or reusable workflow it invokes — sinks frequently live one indirection deep.
+- Don't escalate `workflow_dispatch` injection to RCE severity unless an external or lower-trust route to the input is identified; maintainer-only inputs are not remote exploits.
+- Don't instruct the agent to invoke another named skill at runtime; state the intent directly so the workflow remains runtime-independent.

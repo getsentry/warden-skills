@@ -1,0 +1,13 @@
+name: CI
+on:
+  pull_request_target:
+    types: [opened, synchronize]
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run custom build
+        uses: ./.github/actions/build
+        with:
+          title: ${{ github.event.pull_request.title }}

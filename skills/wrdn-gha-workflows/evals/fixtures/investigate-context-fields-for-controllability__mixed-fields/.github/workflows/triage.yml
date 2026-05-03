@@ -1,0 +1,15 @@
+name: Triage
+on:
+  pull_request_target:
+    types: [opened, edited]
+jobs:
+  triage:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Log metadata
+        run: |
+          echo "Run ID: ${{ github.run_id }}"
+          echo "Repo: ${{ github.repository }}"
+          echo "SHA: ${{ github.sha }}"
+          echo "PR title: ${{ github.event.pull_request.title }}"
+          echo "Head ref: ${{ github.event.pull_request.head.ref }}"

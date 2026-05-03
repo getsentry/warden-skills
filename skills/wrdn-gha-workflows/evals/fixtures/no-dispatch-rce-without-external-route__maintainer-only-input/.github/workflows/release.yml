@@ -1,0 +1,17 @@
+name: Release
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version tag to release'
+        required: true
+        type: string
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Tag release
+        run: |
+          echo "Releasing ${{ github.event.inputs.version }}"
+          git tag ${{ github.event.inputs.version }}
