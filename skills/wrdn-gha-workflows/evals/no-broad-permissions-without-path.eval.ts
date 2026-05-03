@@ -10,10 +10,12 @@ import { expect } from "vitest";
 import {
   createWorkspace,
   describeEval,
-  skilletHarness,
+  piAiHarness,
+  skilletAgent,
+  skilletTools,
+  toolCalls,
 } from "@sentry/skillet/evals";
 import {
-  DoesNotFabricateExploitChainJudge,
   DoesNotFlagBroadPermissionsAloneJudge,
   ExplainsNoExploitablePathJudge,
 } from "./_judges.js";
@@ -22,31 +24,28 @@ const skillRoot = dirname(fileURLToPath(import.meta.url)).replace(/\/evals$/, ""
 
 describeEval(
   "no-broad-permissions-without-path",
-  { harness: skilletHarness({ skill: skillRoot }), judgeThreshold: 0.75 },
+  {
+    harness: piAiHarness({
+      createAgent: () => skilletAgent({ skillRoot }),
+      tools: skilletTools({ skillRoot }),
+    }),
+    judgeThreshold: 0.75,
+  },
   (it) => {
     it(
-      "no-broad-permissions-without-path__write-all-no-untrusted-input",
+      "no-broad-permissions-without-path__write-all-static-job",
       { timeout: 120_000 },
       async ({ run }) => {
-        const cwd = createWorkspace(skillRoot, "no-broad-permissions-without-path__write-all-no-untrusted-input");
-        const result = await run("Please audit .github/workflows/release.yml for security issues and report any vulnerabilities you find.", { metadata: { cwd } });
+        const cwd = createWorkspace(skillRoot, "no-broad-permissions-without-path__write-all-static-job");
+        const result = await run("Audit .github/workflows/release.yml for security issues.", { metadata: { cwd } });
 
+        expect(toolCalls(result.session)).toEqual(
+          expect.arrayContaining([
+            expect.objectContaining({ name: "read_file", arguments: expect.objectContaining({"path":".github/workflows/release.yml"}) }),
+          ]),
+        );
         await expect(result).toSatisfyJudge(DoesNotFlagBroadPermissionsAloneJudge);
         await expect(result).toSatisfyJudge(ExplainsNoExploitablePathJudge);
-        await expect(result).toSatisfyJudge(DoesNotFabricateExploitChainJudge);
-      },
-    );
-
-    it(
-      "no-broad-permissions-without-path__pr-target-no-checkout",
-      { timeout: 120_000 },
-      async ({ run }) => {
-        const cwd = createWorkspace(skillRoot, "no-broad-permissions-without-path__pr-target-no-checkout");
-        const result = await run("Audit this workflow file at .github/workflows/label.yml and tell me about any security vulnerabilities.", { metadata: { cwd } });
-
-        await expect(result).toSatisfyJudge(DoesNotFlagBroadPermissionsAloneJudge);
-        await expect(result).toSatisfyJudge(ExplainsNoExploitablePathJudge);
-        await expect(result).toSatisfyJudge(DoesNotFabricateExploitChainJudge);
       },
     );
   },

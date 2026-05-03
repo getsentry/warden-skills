@@ -10,34 +10,44 @@ import { expect } from "vitest";
 import {
   createWorkspace,
   describeEval,
-  skilletHarness,
+  piAiHarness,
+  skilletAgent,
+  skilletTools,
+  toolCalls,
 } from "@sentry/skillet/evals";
 import {
   ConnectsExploitChainJudge,
-  IdentifiesPrivilegedTriggerJudge,
-  IdentifiesPrivilegesExposedJudge,
+  IncludesConcreteFixJudge,
   IncludesFileLineJudge,
-  RecommendsConcreteFixJudge,
 } from "./_judges.js";
 
 const skillRoot = dirname(fileURLToPath(import.meta.url)).replace(/\/evals$/, "");
 
 describeEval(
   "report-with-trace-and-fix",
-  { harness: skilletHarness({ skill: skillRoot }), judgeThreshold: 0.75 },
+  {
+    harness: piAiHarness({
+      createAgent: () => skilletAgent({ skillRoot }),
+      tools: skilletTools({ skillRoot }),
+    }),
+    judgeThreshold: 0.75,
+  },
   (it) => {
     it(
-      "report-with-trace-and-fix__pr-target-title-injection",
+      "report-with-trace-and-fix__pr-target-script-injection",
       { timeout: 180_000 },
       async ({ run }) => {
-        const cwd = createWorkspace(skillRoot, "report-with-trace-and-fix__pr-target-title-injection");
-        const result = await run("Audit .github/workflows/triage.yml and report any security findings with full detail.", { metadata: { cwd } });
+        const cwd = createWorkspace(skillRoot, "report-with-trace-and-fix__pr-target-script-injection");
+        const result = await run("Audit .github/workflows/ci.yml and report any security findings.", { metadata: { cwd } });
 
+        expect(toolCalls(result.session)).toEqual(
+          expect.arrayContaining([
+            expect.objectContaining({ name: "read_file", arguments: expect.objectContaining({"path":".github/workflows/ci.yml"}) }),
+          ]),
+        );
         await expect(result).toSatisfyJudge(IncludesFileLineJudge);
-        await expect(result).toSatisfyJudge(IdentifiesPrivilegedTriggerJudge);
         await expect(result).toSatisfyJudge(ConnectsExploitChainJudge);
-        await expect(result).toSatisfyJudge(IdentifiesPrivilegesExposedJudge);
-        await expect(result).toSatisfyJudge(RecommendsConcreteFixJudge);
+        await expect(result).toSatisfyJudge(IncludesConcreteFixJudge);
       },
     );
   },

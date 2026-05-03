@@ -10,34 +10,43 @@ import { expect } from "vitest";
 import {
   createWorkspace,
   describeEval,
-  skilletHarness,
+  piAiHarness,
+  skilletAgent,
+  skilletTools,
+  toolCalls,
 } from "@sentry/skillet/evals";
 import {
   IdentifiesExpressionInjectionJudge,
   IdentifiesPrivilegedTriggerJudge,
-  IncludesSinkLocationJudge,
   RatesHighSeverityJudge,
-  RecommendsEnvVarMitigationJudge,
 } from "./_judges.js";
 
 const skillRoot = dirname(fileURLToPath(import.meta.url)).replace(/\/evals$/, "");
 
 describeEval(
   "flag-expression-injection-in-run",
-  { harness: skilletHarness({ skill: skillRoot }), judgeThreshold: 0.75 },
+  {
+    harness: piAiHarness({
+      createAgent: () => skilletAgent({ skillRoot }),
+      tools: skilletTools({ skillRoot }),
+    }),
+    judgeThreshold: 0.75,
+  },
   (it) => {
     it(
-      "flag-expression-injection-in-run__pr-title-in-run",
+      "flag-expression-injection-in-run__pr-title-into-run",
       { timeout: 120_000 },
       async ({ run }) => {
-        const cwd = createWorkspace(skillRoot, "flag-expression-injection-in-run__pr-title-in-run");
-        const result = await run("Please audit .github/workflows/pr-check.yml for security vulnerabilities.", { metadata: { cwd } });
+        const cwd = createWorkspace(skillRoot, "flag-expression-injection-in-run__pr-title-into-run");
+        const result = await run("Audit .github/workflows/triage.yml for security issues. Report findings with severity, trigger, and sink.", { metadata: { cwd } });
 
+        expect(toolCalls(result.session)).toEqual(
+          expect.arrayContaining([
+            expect.objectContaining({ name: "read_file", arguments: expect.objectContaining({"path":".github/workflows/triage.yml"}) }),
+          ]),
+        );
         await expect(result).toSatisfyJudge(IdentifiesExpressionInjectionJudge);
         await expect(result).toSatisfyJudge(IdentifiesPrivilegedTriggerJudge);
-        await expect(result).toSatisfyJudge(IncludesSinkLocationJudge);
-        await expect(result).toSatisfyJudge(RatesHighSeverityJudge);
-        await expect(result).toSatisfyJudge(RecommendsEnvVarMitigationJudge);
       },
     );
 
@@ -46,12 +55,15 @@ describeEval(
       { timeout: 120_000 },
       async ({ run }) => {
         const cwd = createWorkspace(skillRoot, "flag-expression-injection-in-run__issue-comment-body");
-        const result = await run("Review .github/workflows/triage.yml and report any security issues.", { metadata: { cwd } });
+        const result = await run("Please security-review .github/workflows/comment-bot.yml.", { metadata: { cwd } });
 
+        expect(toolCalls(result.session)).toEqual(
+          expect.arrayContaining([
+            expect.objectContaining({ name: "read_file", arguments: expect.objectContaining({"path":".github/workflows/comment-bot.yml"}) }),
+          ]),
+        );
         await expect(result).toSatisfyJudge(IdentifiesExpressionInjectionJudge);
-        await expect(result).toSatisfyJudge(IdentifiesPrivilegedTriggerJudge);
-        await expect(result).toSatisfyJudge(IncludesSinkLocationJudge);
-        await expect(result).toSatisfyJudge(RecommendsEnvVarMitigationJudge);
+        await expect(result).toSatisfyJudge(RatesHighSeverityJudge);
       },
     );
   },

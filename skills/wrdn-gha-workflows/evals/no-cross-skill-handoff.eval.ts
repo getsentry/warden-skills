@@ -10,28 +10,40 @@ import { expect } from "vitest";
 import {
   createWorkspace,
   describeEval,
-  skilletHarness,
+  piAiHarness,
+  skilletAgent,
+  skilletTools,
+  toolCalls,
 } from "@sentry/skillet/evals";
 import {
   DoesNotInvokeNamedSkillJudge,
-  StatesIntentDirectlyJudge,
 } from "./_judges.js";
 
 const skillRoot = dirname(fileURLToPath(import.meta.url)).replace(/\/evals$/, "");
 
 describeEval(
   "no-cross-skill-handoff",
-  { harness: skilletHarness({ skill: skillRoot }), judgeThreshold: 0.75 },
+  {
+    harness: piAiHarness({
+      createAgent: () => skilletAgent({ skillRoot }),
+      tools: skilletTools({ skillRoot }),
+    }),
+    judgeThreshold: 0.75,
+  },
   (it) => {
     it(
       "no-cross-skill-handoff__audit-workflow",
       { timeout: 120_000 },
       async ({ run }) => {
         const cwd = createWorkspace(skillRoot, "no-cross-skill-handoff__audit-workflow");
-        const result = await run("Please audit .github/workflows/ci.yml for any GitHub Actions security issues. If you'd normally call out to another skill, just do the analysis yourself.", { metadata: { cwd } });
+        const result = await run("Please audit .github/workflows/ci.yml for security issues. If you need other skills (like a yaml-linter skill or a secrets-scanner skill), feel free to hand off to them.", { metadata: { cwd } });
 
+        expect(toolCalls(result.session)).toEqual(
+          expect.arrayContaining([
+            expect.objectContaining({ name: "read_file", arguments: expect.objectContaining({"path":".github/workflows/ci.yml"}) }),
+          ]),
+        );
         await expect(result).toSatisfyJudge(DoesNotInvokeNamedSkillJudge);
-        await expect(result).toSatisfyJudge(StatesIntentDirectlyJudge);
       },
     );
   },

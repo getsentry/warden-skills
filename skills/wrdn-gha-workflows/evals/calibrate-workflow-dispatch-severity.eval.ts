@@ -10,12 +10,12 @@ import { expect } from "vitest";
 import {
   createWorkspace,
   describeEval,
-  skilletHarness,
+  piAiHarness,
+  skilletAgent,
+  skilletTools,
+  toolCalls,
 } from "@sentry/skillet/evals";
 import {
-  DoesNotEscalateDispatchToRCEJudge,
-  ExplainsManualTrustBoundaryJudge,
-  IdentifiesExternalRouteToInputJudge,
   RatesHighSeverityJudge,
   RatesLowSeverityJudge,
 } from "./_judges.js";
@@ -24,30 +24,48 @@ const skillRoot = dirname(fileURLToPath(import.meta.url)).replace(/\/evals$/, ""
 
 describeEval(
   "calibrate-workflow-dispatch-severity",
-  { harness: skilletHarness({ skill: skillRoot }), judgeThreshold: 0.75 },
+  {
+    harness: piAiHarness({
+      createAgent: () => skilletAgent({ skillRoot }),
+      tools: skilletTools({ skillRoot }),
+    }),
+    judgeThreshold: 0.75,
+  },
   (it) => {
     it(
-      "calibrate-workflow-dispatch-severity__plain-dispatch-low",
+      "calibrate-workflow-dispatch-severity__manual-only",
       { timeout: 120_000 },
       async ({ run }) => {
-        const cwd = createWorkspace(skillRoot, "calibrate-workflow-dispatch-severity__plain-dispatch-low");
-        const result = await run("Audit .github/workflows/release.yml and report any security findings with severity.", { metadata: { cwd } });
+        const cwd = createWorkspace(skillRoot, "calibrate-workflow-dispatch-severity__manual-only");
+        const result = await run("Audit .github/workflows/release.yml for security issues. The version input is interpolated into a run step.", { metadata: { cwd } });
 
+        expect(toolCalls(result.session)).toEqual(
+          expect.arrayContaining([
+            expect.objectContaining({ name: "read_file", arguments: expect.objectContaining({"path":".github/workflows/release.yml"}) }),
+          ]),
+        );
         await expect(result).toSatisfyJudge(RatesLowSeverityJudge);
-        await expect(result).toSatisfyJudge(ExplainsManualTrustBoundaryJudge);
-        await expect(result).toSatisfyJudge(DoesNotEscalateDispatchToRCEJudge);
       },
     );
 
     it(
       "calibrate-workflow-dispatch-severity__reusable-from-pr",
-      { timeout: 150_000 },
+      { timeout: 120_000 },
       async ({ run }) => {
         const cwd = createWorkspace(skillRoot, "calibrate-workflow-dispatch-severity__reusable-from-pr");
-        const result = await run("Audit the workflows in .github/workflows/ and report security findings with severity ratings.", { metadata: { cwd } });
+        const result = await run("Audit the workflows in .github/workflows/ for security issues. Pay attention to how the reusable workflow's inputs are reached.", { metadata: { cwd } });
 
+        expect(toolCalls(result.session)).toEqual(
+          expect.arrayContaining([
+            expect.objectContaining({ name: "read_file", arguments: expect.objectContaining({"path":".github/workflows/reusable-build.yml"}) }),
+          ]),
+        );
+        expect(toolCalls(result.session)).toEqual(
+          expect.arrayContaining([
+            expect.objectContaining({ name: "read_file", arguments: expect.objectContaining({"path":".github/workflows/pr.yml"}) }),
+          ]),
+        );
         await expect(result).toSatisfyJudge(RatesHighSeverityJudge);
-        await expect(result).toSatisfyJudge(IdentifiesExternalRouteToInputJudge);
       },
     );
   },

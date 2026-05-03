@@ -3,7 +3,7 @@ on:
   pull_request_target:
     branches: [main]
 jobs:
-  build:
+  test:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -12,6 +12,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 20
-      - run: npm ci && npm test
+      - run: npm ci
+      - run: npm test
         env:
           NPM_TOKEN: ${{ secrets.NPM_TOKEN }}

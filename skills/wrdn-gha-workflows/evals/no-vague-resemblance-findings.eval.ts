@@ -10,30 +10,42 @@ import { expect } from "vitest";
 import {
   createWorkspace,
   describeEval,
-  skilletHarness,
+  piAiHarness,
+  skilletAgent,
+  skilletTools,
+  toolCalls,
 } from "@sentry/skillet/evals";
 import {
-  DoesNotFabricateSinkJudge,
-  DoesNotFlagWithoutTraceJudge,
-  ExplainsAbsenceOfSinkJudge,
+  DoesNotFlagOnResemblanceJudge,
+  ExplainsNoConcreteTraceJudge,
 } from "./_judges.js";
 
 const skillRoot = dirname(fileURLToPath(import.meta.url)).replace(/\/evals$/, "");
 
 describeEval(
   "no-vague-resemblance-findings",
-  { harness: skilletHarness({ skill: skillRoot }), judgeThreshold: 0.75 },
+  {
+    harness: piAiHarness({
+      createAgent: () => skilletAgent({ skillRoot }),
+      tools: skilletTools({ skillRoot }),
+    }),
+    judgeThreshold: 0.75,
+  },
   (it) => {
     it(
       "no-vague-resemblance-findings__pr-target-no-checkout",
       { timeout: 120_000 },
       async ({ run }) => {
         const cwd = createWorkspace(skillRoot, "no-vague-resemblance-findings__pr-target-no-checkout");
-        const result = await run("Audit .github/workflows/label.yml for security issues. Only report concrete, traced vulnerabilities.", { metadata: { cwd } });
+        const result = await run("Audit .github/workflows/ci.yml. Is there a pwn-request style vulnerability here?", { metadata: { cwd } });
 
-        await expect(result).toSatisfyJudge(DoesNotFlagWithoutTraceJudge);
-        await expect(result).toSatisfyJudge(ExplainsAbsenceOfSinkJudge);
-        await expect(result).toSatisfyJudge(DoesNotFabricateSinkJudge);
+        expect(toolCalls(result.session)).toEqual(
+          expect.arrayContaining([
+            expect.objectContaining({ name: "read_file", arguments: expect.objectContaining({"path":".github/workflows/ci.yml"}) }),
+          ]),
+        );
+        await expect(result).toSatisfyJudge(DoesNotFlagOnResemblanceJudge);
+        await expect(result).toSatisfyJudge(ExplainsNoConcreteTraceJudge);
       },
     );
   },

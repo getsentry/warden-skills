@@ -10,48 +10,60 @@ import { expect } from "vitest";
 import {
   createWorkspace,
   describeEval,
-  skilletHarness,
+  piAiHarness,
+  skilletAgent,
+  skilletTools,
+  toolCalls,
 } from "@sentry/skillet/evals";
 import {
-  ConnectsExploitChainJudge,
   DoesNotFlagConstrainedInputJudge,
-  IdentifiesInjectionSinkJudge,
-  IdentifiesSupplyChainImpactJudge,
-  RatesSeverityWithExternalRouteJudge,
+  IdentifiesInputToSinkFlowJudge,
+  RatesSupplyChainImpactJudge,
 } from "./_judges.js";
 
 const skillRoot = dirname(fileURLToPath(import.meta.url)).replace(/\/evals$/, "");
 
 describeEval(
   "flag-release-and-publish-input-injection",
-  { harness: skilletHarness({ skill: skillRoot }), judgeThreshold: 0.75 },
+  {
+    harness: piAiHarness({
+      createAgent: () => skilletAgent({ skillRoot }),
+      tools: skilletTools({ skillRoot }),
+    }),
+    judgeThreshold: 0.75,
+  },
   (it) => {
     it(
-      "flag-release-and-publish-input-injection__dispatch-version-in-run",
+      "flag-release-and-publish-input-injection__dispatch-version-into-run",
       { timeout: 120_000 },
       async ({ run }) => {
-        const cwd = createWorkspace(skillRoot, "flag-release-and-publish-input-injection__dispatch-version-in-run");
-        const result = await run("Please review .github/workflows/release.yml for security issues and tell me what you find.", { metadata: { cwd } });
+        const cwd = createWorkspace(skillRoot, "flag-release-and-publish-input-injection__dispatch-version-into-run");
+        const result = await run("Please review .github/workflows/release.yml for security issues and report any injection or supply-chain risks.", { metadata: { cwd } });
 
-        await expect(result).toSatisfyJudge(IdentifiesInjectionSinkJudge);
-        await expect(result).toSatisfyJudge(ConnectsExploitChainJudge);
-        await expect(result).toSatisfyJudge(IdentifiesSupplyChainImpactJudge);
-        await expect(result).toSatisfyJudge(RatesSeverityWithExternalRouteJudge);
-        await expect(result).toSatisfyJudge(DoesNotFlagConstrainedInputJudge);
+        expect(toolCalls(result.session)).toEqual(
+          expect.arrayContaining([
+            expect.objectContaining({ name: "Read", arguments: expect.objectContaining({"file_path":".github/workflows/release.yml"}) }),
+          ]),
+        );
+        await expect(result).toSatisfyJudge(IdentifiesInputToSinkFlowJudge);
+        await expect(result).toSatisfyJudge(RatesSupplyChainImpactJudge);
       },
     );
 
     it(
-      "flag-release-and-publish-input-injection__workflow-call-tag-injection",
+      "flag-release-and-publish-input-injection__call-tag-into-git",
       { timeout: 120_000 },
       async ({ run }) => {
-        const cwd = createWorkspace(skillRoot, "flag-release-and-publish-input-injection__workflow-call-tag-injection");
-        const result = await run("Audit .github/workflows/publish.yml — it's a reusable workflow callers use to publish packages. Anything risky?", { metadata: { cwd } });
+        const cwd = createWorkspace(skillRoot, "flag-release-and-publish-input-injection__call-tag-into-git");
+        const result = await run("Audit .github/workflows/publish.yml — any concerns with how the reusable workflow handles inputs?", { metadata: { cwd } });
 
-        await expect(result).toSatisfyJudge(IdentifiesInjectionSinkJudge);
-        await expect(result).toSatisfyJudge(ConnectsExploitChainJudge);
-        await expect(result).toSatisfyJudge(IdentifiesSupplyChainImpactJudge);
-        await expect(result).toSatisfyJudge(RatesSeverityWithExternalRouteJudge);
+        expect(toolCalls(result.session)).toEqual(
+          expect.arrayContaining([
+            expect.objectContaining({ name: "Read", arguments: expect.objectContaining({"file_path":".github/workflows/publish.yml"}) }),
+          ]),
+        );
+        await expect(result).toSatisfyJudge(IdentifiesInputToSinkFlowJudge);
+        await expect(result).toSatisfyJudge(DoesNotFlagConstrainedInputJudge);
       },
     );
   },

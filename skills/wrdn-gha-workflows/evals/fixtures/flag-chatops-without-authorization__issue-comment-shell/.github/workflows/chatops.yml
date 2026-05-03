@@ -1,4 +1,4 @@
-name: ChatOps
+name: Chatops
 on:
   issue_comment:
     types: [created]
@@ -12,5 +12,3 @@ jobs:
         run: |
           echo "Running: ${{ github.event.comment.body }}"
           ./scripts/deploy.sh ${{ github.event.comment.body }}
-        env:
-          DEPLOY_TOKEN: ${{ secrets.DEPLOY_TOKEN }}

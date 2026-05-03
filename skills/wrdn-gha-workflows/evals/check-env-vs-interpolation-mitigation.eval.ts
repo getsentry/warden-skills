@@ -10,30 +10,59 @@ import { expect } from "vitest";
 import {
   createWorkspace,
   describeEval,
-  skilletHarness,
+  piAiHarness,
+  skilletAgent,
+  skilletTools,
+  toolCalls,
 } from "@sentry/skillet/evals";
 import {
   DoesNotFlagEnvQuotedPatternJudge,
   ExplainsEnvQuotedSafeJudge,
-  VerifiesQuotingAndSinkJudge,
+  FlagsBrokenQuotingJudge,
 } from "./_judges.js";
 
 const skillRoot = dirname(fileURLToPath(import.meta.url)).replace(/\/evals$/, "");
 
 describeEval(
   "check-env-vs-interpolation-mitigation",
-  { harness: skilletHarness({ skill: skillRoot }), judgeThreshold: 0.75 },
+  {
+    harness: piAiHarness({
+      createAgent: () => skilletAgent({ skillRoot }),
+      tools: skilletTools({ skillRoot }),
+    }),
+    judgeThreshold: 0.75,
+  },
   (it) => {
     it(
-      "check-env-vs-interpolation-mitigation__pr-title-env-quoted",
+      "check-env-vs-interpolation-mitigation__quoted-env-safe",
       { timeout: 120_000 },
       async ({ run }) => {
-        const cwd = createWorkspace(skillRoot, "check-env-vs-interpolation-mitigation__pr-title-env-quoted");
-        const result = await run("Audit .github/workflows/pr-check.yml for expression injection or command injection risks in how the PR title is handled.", { metadata: { cwd } });
+        const cwd = createWorkspace(skillRoot, "check-env-vs-interpolation-mitigation__quoted-env-safe");
+        const result = await run("Audit .github/workflows/pr.yml for security issues. Is the PR title handling here vulnerable to expression injection?", { metadata: { cwd } });
 
+        expect(toolCalls(result.session)).toEqual(
+          expect.arrayContaining([
+            expect.objectContaining({ name: "read_file", arguments: expect.objectContaining({"path":".github/workflows/pr.yml"}) }),
+          ]),
+        );
         await expect(result).toSatisfyJudge(DoesNotFlagEnvQuotedPatternJudge);
         await expect(result).toSatisfyJudge(ExplainsEnvQuotedSafeJudge);
-        await expect(result).toSatisfyJudge(VerifiesQuotingAndSinkJudge);
+      },
+    );
+
+    it(
+      "check-env-vs-interpolation-mitigation__broken-quoting-still-flagged",
+      { timeout: 120_000 },
+      async ({ run }) => {
+        const cwd = createWorkspace(skillRoot, "check-env-vs-interpolation-mitigation__broken-quoting-still-flagged");
+        const result = await run("Review .github/workflows/pr.yml. Is the PR title handling safe because it uses env:?", { metadata: { cwd } });
+
+        expect(toolCalls(result.session)).toEqual(
+          expect.arrayContaining([
+            expect.objectContaining({ name: "read_file", arguments: expect.objectContaining({"path":".github/workflows/pr.yml"}) }),
+          ]),
+        );
+        await expect(result).toSatisfyJudge(FlagsBrokenQuotingJudge);
       },
     );
   },

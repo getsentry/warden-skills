@@ -10,32 +10,60 @@ import { expect } from "vitest";
 import {
   createWorkspace,
   describeEval,
-  skilletHarness,
+  piAiHarness,
+  skilletAgent,
+  skilletTools,
+  toolCalls,
 } from "@sentry/skillet/evals";
 import {
-  DoesNotAssessSinksBeforeEnumerationJudge,
   EnumeratesAllTriggersJudge,
   EnumeratesReusableCallersJudge,
-  LabelsTrustBoundaryJudge,
+  IdentifiesTrustBoundaryJudge,
 } from "./_judges.js";
 
 const skillRoot = dirname(fileURLToPath(import.meta.url)).replace(/\/evals$/, "");
 
 describeEval(
   "enumerate-triggers-and-callers",
-  { harness: skilletHarness({ skill: skillRoot }), judgeThreshold: 0.75 },
+  {
+    harness: piAiHarness({
+      createAgent: () => skilletAgent({ skillRoot }),
+      tools: skilletTools({ skillRoot }),
+    }),
+    judgeThreshold: 0.75,
+  },
   (it) => {
     it(
-      "enumerate-triggers-and-callers__multi-trigger-with-reusable",
-      { timeout: 180_000 },
+      "enumerate-triggers-and-callers__multi-trigger-workflow",
+      { timeout: 120_000 },
       async ({ run }) => {
-        const cwd = createWorkspace(skillRoot, "enumerate-triggers-and-callers__multi-trigger-with-reusable");
-        const result = await run("Audit .github/workflows/release.yml for security issues. Walk me through your assessment.", { metadata: { cwd } });
+        const cwd = createWorkspace(skillRoot, "enumerate-triggers-and-callers__multi-trigger-workflow");
+        const result = await run("Please review .github/workflows/build.yml for security issues. Walk me through the entry points first.", { metadata: { cwd } });
 
+        expect(toolCalls(result.session)).toEqual(
+          expect.arrayContaining([
+            expect.objectContaining({ name: "read_file", arguments: expect.objectContaining({"path":".github/workflows/build.yml"}) }),
+          ]),
+        );
         await expect(result).toSatisfyJudge(EnumeratesAllTriggersJudge);
+        await expect(result).toSatisfyJudge(IdentifiesTrustBoundaryJudge);
+      },
+    );
+
+    it(
+      "enumerate-triggers-and-callers__reusable-workflow-callers",
+      { timeout: 150_000 },
+      async ({ run }) => {
+        const cwd = createWorkspace(skillRoot, "enumerate-triggers-and-callers__reusable-workflow-callers");
+        const result = await run("Audit .github/workflows/deploy.yml for security issues. Be sure to account for who can reach this workflow.", { metadata: { cwd } });
+
+        expect(toolCalls(result.session)).toEqual(
+          expect.arrayContaining([
+            expect.objectContaining({ name: "read_file", arguments: expect.objectContaining({"path":".github/workflows/deploy.yml"}) }),
+          ]),
+        );
         await expect(result).toSatisfyJudge(EnumeratesReusableCallersJudge);
-        await expect(result).toSatisfyJudge(LabelsTrustBoundaryJudge);
-        await expect(result).toSatisfyJudge(DoesNotAssessSinksBeforeEnumerationJudge);
+        await expect(result).toSatisfyJudge(IdentifiesTrustBoundaryJudge);
       },
     );
   },

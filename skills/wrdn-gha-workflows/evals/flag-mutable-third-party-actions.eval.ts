@@ -10,32 +10,60 @@ import { expect } from "vitest";
 import {
   createWorkspace,
   describeEval,
-  skilletHarness,
+  piAiHarness,
+  skilletAgent,
+  skilletTools,
+  toolCalls,
 } from "@sentry/skillet/evals";
 import {
   ConnectsPrivilegedContextJudge,
-  DoesNotFlagFirstPartyActionsJudge,
+  DoesNotFlagSHAPinnedActionJudge,
   IdentifiesMutableActionPinJudge,
-  RecommendsShaPinJudge,
 } from "./_judges.js";
 
 const skillRoot = dirname(fileURLToPath(import.meta.url)).replace(/\/evals$/, "");
 
 describeEval(
   "flag-mutable-third-party-actions",
-  { harness: skilletHarness({ skill: skillRoot }), judgeThreshold: 0.75 },
+  {
+    harness: piAiHarness({
+      createAgent: () => skilletAgent({ skillRoot }),
+      tools: skilletTools({ skillRoot }),
+    }),
+    judgeThreshold: 0.75,
+  },
   (it) => {
     it(
-      "flag-mutable-third-party-actions__publish-with-tag-pin",
+      "flag-mutable-third-party-actions__tag-pin-with-secrets",
       { timeout: 120_000 },
       async ({ run }) => {
-        const cwd = createWorkspace(skillRoot, "flag-mutable-third-party-actions__publish-with-tag-pin");
-        const result = await run("Audit .github/workflows/release.yml for security issues.", { metadata: { cwd } });
+        const cwd = createWorkspace(skillRoot, "flag-mutable-third-party-actions__tag-pin-with-secrets");
+        const result = await run("Please review .github/workflows/release.yml for security issues.", { metadata: { cwd } });
 
+        expect(toolCalls(result.session)).toEqual(
+          expect.arrayContaining([
+            expect.objectContaining({ name: "read_file", arguments: expect.objectContaining({"path":".github/workflows/release.yml"}) }),
+          ]),
+        );
         await expect(result).toSatisfyJudge(IdentifiesMutableActionPinJudge);
         await expect(result).toSatisfyJudge(ConnectsPrivilegedContextJudge);
-        await expect(result).toSatisfyJudge(RecommendsShaPinJudge);
-        await expect(result).toSatisfyJudge(DoesNotFlagFirstPartyActionsJudge);
+      },
+    );
+
+    it(
+      "flag-mutable-third-party-actions__branch-pin-self-hosted",
+      { timeout: 120_000 },
+      async ({ run }) => {
+        const cwd = createWorkspace(skillRoot, "flag-mutable-third-party-actions__branch-pin-self-hosted");
+        const result = await run("Audit .github/workflows/deploy.yml — anything risky about the third-party actions?", { metadata: { cwd } });
+
+        expect(toolCalls(result.session)).toEqual(
+          expect.arrayContaining([
+            expect.objectContaining({ name: "read_file", arguments: expect.objectContaining({"path":".github/workflows/deploy.yml"}) }),
+          ]),
+        );
+        await expect(result).toSatisfyJudge(IdentifiesMutableActionPinJudge);
+        await expect(result).toSatisfyJudge(DoesNotFlagSHAPinnedActionJudge);
       },
     );
   },

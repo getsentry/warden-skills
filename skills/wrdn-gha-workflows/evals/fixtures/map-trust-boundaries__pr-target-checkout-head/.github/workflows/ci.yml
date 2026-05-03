@@ -2,25 +2,16 @@ name: CI
 on:
   pull_request_target:
     types: [opened, synchronize]
-
-permissions:
-  contents: read
-  pull-requests: write
-
 jobs:
-  lint:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - run: echo "linting base ref"
-
   test:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
     steps:
       - uses: actions/checkout@v4
         with:
           ref: ${{ github.event.pull_request.head.sha }}
-      - run: npm ci
-      - run: npm test
+      - run: npm ci && npm test
         env:
           NPM_TOKEN: ${{ secrets.NPM_TOKEN }}

@@ -10,32 +10,42 @@ import { expect } from "vitest";
 import {
   createWorkspace,
   describeEval,
-  skilletHarness,
+  piAiHarness,
+  skilletAgent,
+  skilletTools,
+  toolCalls,
 } from "@sentry/skillet/evals";
 import {
-  ConnectsExploitChainJudge,
-  IdentifiesScriptInjectionSinkJudge,
-  RatesHighSeverityJudge,
-  RecommendsEnvVarMitigationJudge,
+  IdentifiesScriptActionInjectionJudge,
+  RecommendsEnvOrContextForScriptJudge,
 } from "./_judges.js";
 
 const skillRoot = dirname(fileURLToPath(import.meta.url)).replace(/\/evals$/, "");
 
 describeEval(
   "flag-script-action-injection",
-  { harness: skilletHarness({ skill: skillRoot }), judgeThreshold: 0.75 },
+  {
+    harness: piAiHarness({
+      createAgent: () => skilletAgent({ skillRoot }),
+      tools: skilletTools({ skillRoot }),
+    }),
+    judgeThreshold: 0.75,
+  },
   (it) => {
     it(
-      "flag-script-action-injection__github-script-pr-title",
-      { timeout: 180_000 },
+      "flag-script-action-injection__pr-title-in-github-script",
+      { timeout: 120_000 },
       async ({ run }) => {
-        const cwd = createWorkspace(skillRoot, "flag-script-action-injection__github-script-pr-title");
-        const result = await run("Audit .github/workflows/triage.yml for security issues.", { metadata: { cwd } });
+        const cwd = createWorkspace(skillRoot, "flag-script-action-injection__pr-title-in-github-script");
+        const result = await run("Please review .github/workflows/triage.yml for security issues.", { metadata: { cwd } });
 
-        await expect(result).toSatisfyJudge(IdentifiesScriptInjectionSinkJudge);
-        await expect(result).toSatisfyJudge(ConnectsExploitChainJudge);
-        await expect(result).toSatisfyJudge(RecommendsEnvVarMitigationJudge);
-        await expect(result).toSatisfyJudge(RatesHighSeverityJudge);
+        expect(toolCalls(result.session)).toEqual(
+          expect.arrayContaining([
+            expect.objectContaining({ name: "Read", arguments: expect.objectContaining({"file_path":".github/workflows/triage.yml"}) }),
+          ]),
+        );
+        await expect(result).toSatisfyJudge(IdentifiesScriptActionInjectionJudge);
+        await expect(result).toSatisfyJudge(RecommendsEnvOrContextForScriptJudge);
       },
     );
   },

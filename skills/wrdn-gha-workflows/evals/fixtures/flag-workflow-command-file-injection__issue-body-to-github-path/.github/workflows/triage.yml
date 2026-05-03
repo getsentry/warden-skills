@@ -6,8 +6,12 @@ jobs:
   triage:
     runs-on: ubuntu-latest
     steps:
-      - name: Extract path hint
+      - uses: actions/checkout@v4
+      - name: Set tool path from issue
         run: |
           echo "${{ github.event.issue.body }}" >> $GITHUB_PATH
-      - name: Build
-        run: make build
+      - name: Run linter
+        run: |
+          mylinter --check .
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

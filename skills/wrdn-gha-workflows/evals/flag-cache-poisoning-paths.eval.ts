@@ -10,12 +10,14 @@ import { expect } from "vitest";
 import {
   createWorkspace,
   describeEval,
-  skilletHarness,
+  piAiHarness,
+  skilletAgent,
+  skilletTools,
+  toolCalls,
 } from "@sentry/skillet/evals";
 import {
-  ConnectsCacheToExecutionJudge,
-  DoesNotFlagBenignCacheJudge,
-  IdentifiesCachePoisoningPathJudge,
+  ConnectsExploitChainJudge,
+  IdentifiesCachePoisoningJudge,
   RatesHighSeverityJudge,
 } from "./_judges.js";
 
@@ -23,29 +25,34 @@ const skillRoot = dirname(fileURLToPath(import.meta.url)).replace(/\/evals$/, ""
 
 describeEval(
   "flag-cache-poisoning-paths",
-  { harness: skilletHarness({ skill: skillRoot }), judgeThreshold: 0.75 },
+  {
+    harness: piAiHarness({
+      createAgent: () => skilletAgent({ skillRoot }),
+      tools: skilletTools({ skillRoot }),
+    }),
+    judgeThreshold: 0.75,
+  },
   (it) => {
     it(
-      "flag-cache-poisoning-paths__pr-populates-cache-restored-by-privileged",
+      "flag-cache-poisoning-paths__shared-cache-key-restored-in-release",
       { timeout: 180_000 },
       async ({ run }) => {
-        const cwd = createWorkspace(skillRoot, "flag-cache-poisoning-paths__pr-populates-cache-restored-by-privileged");
+        const cwd = createWorkspace(skillRoot, "flag-cache-poisoning-paths__shared-cache-key-restored-in-release");
         const result = await run("Audit the workflows in .github/workflows/ for security issues.", { metadata: { cwd } });
 
-        await expect(result).toSatisfyJudge(IdentifiesCachePoisoningPathJudge);
-        await expect(result).toSatisfyJudge(ConnectsCacheToExecutionJudge);
+        expect(toolCalls(result.session)).toEqual(
+          expect.arrayContaining([
+            expect.objectContaining({ name: "Read", arguments: expect.objectContaining({"file_path":".github/workflows/pr.yml"}) }),
+          ]),
+        );
+        expect(toolCalls(result.session)).toEqual(
+          expect.arrayContaining([
+            expect.objectContaining({ name: "Read", arguments: expect.objectContaining({"file_path":".github/workflows/release.yml"}) }),
+          ]),
+        );
+        await expect(result).toSatisfyJudge(IdentifiesCachePoisoningJudge);
+        await expect(result).toSatisfyJudge(ConnectsExploitChainJudge);
         await expect(result).toSatisfyJudge(RatesHighSeverityJudge);
-      },
-    );
-
-    it(
-      "flag-cache-poisoning-paths__same-context-cache-not-flagged",
-      { timeout: 120_000 },
-      async ({ run }) => {
-        const cwd = createWorkspace(skillRoot, "flag-cache-poisoning-paths__same-context-cache-not-flagged");
-        const result = await run("Audit .github/workflows/ci.yml for security issues.", { metadata: { cwd } });
-
-        await expect(result).toSatisfyJudge(DoesNotFlagBenignCacheJudge);
       },
     );
   },

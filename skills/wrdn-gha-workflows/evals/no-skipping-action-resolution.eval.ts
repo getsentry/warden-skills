@@ -10,12 +10,13 @@ import { expect } from "vitest";
 import {
   createWorkspace,
   describeEval,
-  skilletHarness,
+  piAiHarness,
+  skilletAgent,
+  skilletTools,
   toolCalls,
 } from "@sentry/skillet/evals";
 import {
-  DoesNotAssumeActionSafeJudge,
-  IdentifiesSinkInResolvedActionJudge,
+  DoesNotDeclareSafeWithoutResolutionJudge,
   ResolvesLocalActionJudge,
 } from "./_judges.js";
 
@@ -23,20 +24,33 @@ const skillRoot = dirname(fileURLToPath(import.meta.url)).replace(/\/evals$/, ""
 
 describeEval(
   "no-skipping-action-resolution",
-  { harness: skilletHarness({ skill: skillRoot }), judgeThreshold: 0.75 },
+  {
+    harness: piAiHarness({
+      createAgent: () => skilletAgent({ skillRoot }),
+      tools: skilletTools({ skillRoot }),
+    }),
+    judgeThreshold: 0.75,
+  },
   (it) => {
     it(
-      "no-skipping-action-resolution__local-composite-with-sink",
+      "no-skipping-action-resolution__local-composite-hides-sink",
       { timeout: 180_000 },
       async ({ run }) => {
-        const cwd = createWorkspace(skillRoot, "no-skipping-action-resolution__local-composite-with-sink");
-        const result = await run("Audit .github/workflows/ci.yml for security issues. Trace any attacker-controlled inputs through to sinks.", { metadata: { cwd } });
+        const cwd = createWorkspace(skillRoot, "no-skipping-action-resolution__local-composite-hides-sink");
+        const result = await run("Audit .github/workflows/ci.yml. Is the build step safe?", { metadata: { cwd } });
 
-        const toolNames = toolCalls(result.session).map((c) => c.name);
-        expect(toolNames).toEqual(expect.arrayContaining(["Read"]));
+        expect(toolCalls(result.session)).toEqual(
+          expect.arrayContaining([
+            expect.objectContaining({ name: "read_file", arguments: expect.objectContaining({"path":".github/workflows/ci.yml"}) }),
+          ]),
+        );
+        expect(toolCalls(result.session)).toEqual(
+          expect.arrayContaining([
+            expect.objectContaining({ name: "read_file", arguments: expect.objectContaining({"path":".github/actions/build/action.yml"}) }),
+          ]),
+        );
         await expect(result).toSatisfyJudge(ResolvesLocalActionJudge);
-        await expect(result).toSatisfyJudge(IdentifiesSinkInResolvedActionJudge);
-        await expect(result).toSatisfyJudge(DoesNotAssumeActionSafeJudge);
+        await expect(result).toSatisfyJudge(DoesNotDeclareSafeWithoutResolutionJudge);
       },
     );
   },

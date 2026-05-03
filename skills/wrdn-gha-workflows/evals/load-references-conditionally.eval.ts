@@ -10,12 +10,13 @@ import { expect } from "vitest";
 import {
   createWorkspace,
   describeEval,
-  skilletHarness,
+  piAiHarness,
+  skilletAgent,
+  skilletTools,
   toolCalls,
 } from "@sentry/skillet/evals";
 import {
-  DoesNotLoadIrrelevantReferencesJudge,
-  IdentifiesPrivilegedTriggerJudge,
+  DoesNotLoadIrrelevantReferenceJudge,
   LoadsMatchingReferenceJudge,
 } from "./_judges.js";
 
@@ -23,20 +24,49 @@ const skillRoot = dirname(fileURLToPath(import.meta.url)).replace(/\/evals$/, ""
 
 describeEval(
   "load-references-conditionally",
-  { harness: skilletHarness({ skill: skillRoot }), judgeThreshold: 0.75 },
+  {
+    harness: piAiHarness({
+      createAgent: () => skilletAgent({ skillRoot }),
+      tools: skilletTools({ skillRoot }),
+    }),
+    judgeThreshold: 0.75,
+  },
   (it) => {
     it(
-      "load-references-conditionally__pwn-request-loads-pwn-ref",
-      { timeout: 180_000 },
+      "load-references-conditionally__pwn-request-pattern",
+      { timeout: 120_000 },
       async ({ run }) => {
-        const cwd = createWorkspace(skillRoot, "load-references-conditionally__pwn-request-loads-pwn-ref");
-        const result = await run("Audit .github/workflows/ci.yml in the current working directory for security issues.", { metadata: { cwd } });
+        const cwd = createWorkspace(skillRoot, "load-references-conditionally__pwn-request-pattern");
+        const result = await run("Audit .github/workflows/ci.yml for security issues.", { metadata: { cwd } });
 
-        const toolNames = toolCalls(result.session).map((c) => c.name);
-        expect(toolNames).toEqual(expect.arrayContaining(["Read"]));
+        expect(toolCalls(result.session)).toEqual(
+          expect.arrayContaining([
+            expect.objectContaining({ name: "read_file", arguments: expect.objectContaining({"path":".github/workflows/ci.yml"}) }),
+          ]),
+        );
+        expect(toolCalls(result.session)).toEqual(
+          expect.arrayContaining([
+            expect.objectContaining({ name: "read_file", arguments: expect.objectContaining({"path":"references/pwn-requests.md"}) }),
+          ]),
+        );
         await expect(result).toSatisfyJudge(LoadsMatchingReferenceJudge);
-        await expect(result).toSatisfyJudge(DoesNotLoadIrrelevantReferencesJudge);
-        await expect(result).toSatisfyJudge(IdentifiesPrivilegedTriggerJudge);
+      },
+    );
+
+    it(
+      "load-references-conditionally__chatops-only",
+      { timeout: 120_000 },
+      async ({ run }) => {
+        const cwd = createWorkspace(skillRoot, "load-references-conditionally__chatops-only");
+        const result = await run("Review .github/workflows/triage.yml for security issues.", { metadata: { cwd } });
+
+        expect(toolCalls(result.session)).toEqual(
+          expect.arrayContaining([
+            expect.objectContaining({ name: "read_file", arguments: expect.objectContaining({"path":"references/chatops.md"}) }),
+          ]),
+        );
+        await expect(result).toSatisfyJudge(LoadsMatchingReferenceJudge);
+        await expect(result).toSatisfyJudge(DoesNotLoadIrrelevantReferenceJudge);
       },
     );
   },

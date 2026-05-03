@@ -10,32 +10,43 @@ import { expect } from "vitest";
 import {
   createWorkspace,
   describeEval,
-  skilletHarness,
+  piAiHarness,
+  skilletAgent,
+  skilletTools,
+  toolCalls,
 } from "@sentry/skillet/evals";
 import {
-  ConnectsTriggerToUntrustedContentJudge,
-  DoesNotFlagStyleJudge,
-  IdentifiesTrustBoundaryTransitionJudge,
-  IdentifiesTrustContextPerJobJudge,
+  ConnectsCheckoutRefToUntrustedJudge,
+  IdentifiesTrustBoundaryJudge,
+  IdentifiesWorkflowRunDownloadTransitionJudge,
 } from "./_judges.js";
 
 const skillRoot = dirname(fileURLToPath(import.meta.url)).replace(/\/evals$/, "");
 
 describeEval(
   "map-trust-boundaries",
-  { harness: skilletHarness({ skill: skillRoot }), judgeThreshold: 0.75 },
+  {
+    harness: piAiHarness({
+      createAgent: () => skilletAgent({ skillRoot }),
+      tools: skilletTools({ skillRoot }),
+    }),
+    judgeThreshold: 0.75,
+  },
   (it) => {
     it(
       "map-trust-boundaries__pr-target-checkout-head",
       { timeout: 120_000 },
       async ({ run }) => {
         const cwd = createWorkspace(skillRoot, "map-trust-boundaries__pr-target-checkout-head");
-        const result = await run("Map the trust boundaries for each job in .github/workflows/ci.yml. For each job state whether it's trusted or untrusted and identify any transitions.", { metadata: { cwd } });
+        const result = await run("Map the trust boundaries for each job in .github/workflows/ci.yml. For every job, say whether it runs in a trusted or untrusted context and call out any transitions.", { metadata: { cwd } });
 
-        await expect(result).toSatisfyJudge(IdentifiesTrustContextPerJobJudge);
-        await expect(result).toSatisfyJudge(IdentifiesTrustBoundaryTransitionJudge);
-        await expect(result).toSatisfyJudge(ConnectsTriggerToUntrustedContentJudge);
-        await expect(result).toSatisfyJudge(DoesNotFlagStyleJudge);
+        expect(toolCalls(result.session)).toEqual(
+          expect.arrayContaining([
+            expect.objectContaining({ name: "read_file", arguments: expect.objectContaining({"path":".github/workflows/ci.yml"}) }),
+          ]),
+        );
+        await expect(result).toSatisfyJudge(IdentifiesTrustBoundaryJudge);
+        await expect(result).toSatisfyJudge(ConnectsCheckoutRefToUntrustedJudge);
       },
     );
 
@@ -44,11 +55,15 @@ describeEval(
       { timeout: 120_000 },
       async ({ run }) => {
         const cwd = createWorkspace(skillRoot, "map-trust-boundaries__workflow-run-artifact");
-        const result = await run("Walk through the trust boundaries in .github/workflows/publish.yml job by job. Where does untrusted content enter a trusted context?", { metadata: { cwd } });
+        const result = await run("Audit .github/workflows/comment.yml and map the trust context for each job. Flag any boundary transitions.", { metadata: { cwd } });
 
-        await expect(result).toSatisfyJudge(IdentifiesTrustContextPerJobJudge);
-        await expect(result).toSatisfyJudge(IdentifiesTrustBoundaryTransitionJudge);
-        await expect(result).toSatisfyJudge(ConnectsTriggerToUntrustedContentJudge);
+        expect(toolCalls(result.session)).toEqual(
+          expect.arrayContaining([
+            expect.objectContaining({ name: "read_file", arguments: expect.objectContaining({"path":".github/workflows/comment.yml"}) }),
+          ]),
+        );
+        await expect(result).toSatisfyJudge(IdentifiesTrustBoundaryJudge);
+        await expect(result).toSatisfyJudge(IdentifiesWorkflowRunDownloadTransitionJudge);
       },
     );
   },

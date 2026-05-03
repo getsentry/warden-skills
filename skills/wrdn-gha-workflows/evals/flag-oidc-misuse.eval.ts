@@ -10,13 +10,14 @@ import { expect } from "vitest";
 import {
   createWorkspace,
   describeEval,
-  skilletHarness,
+  piAiHarness,
+  skilletAgent,
+  skilletTools,
+  toolCalls,
 } from "@sentry/skillet/evals";
 import {
-  ConnectsUntrustedTriggerToOIDCJudge,
-  DoesNotFlagOIDCInTrustedJobJudge,
-  FlagsAudienceOrSubjectClaimJudge,
-  IdentifiesOIDCTokenMintingJudge,
+  FlagsAudienceSubjectClaimsJudge,
+  IdentifiesOIDCMisuseJudge,
   RatesHighSeverityJudge,
 } from "./_judges.js";
 
@@ -24,30 +25,45 @@ const skillRoot = dirname(fileURLToPath(import.meta.url)).replace(/\/evals$/, ""
 
 describeEval(
   "flag-oidc-misuse",
-  { harness: skilletHarness({ skill: skillRoot }), judgeThreshold: 0.75 },
+  {
+    harness: piAiHarness({
+      createAgent: () => skilletAgent({ skillRoot }),
+      tools: skilletTools({ skillRoot }),
+    }),
+    judgeThreshold: 0.75,
+  },
   (it) => {
     it(
-      "flag-oidc-misuse__pr-target-mints-aws-token",
+      "flag-oidc-misuse__pr-target-aws-oidc",
       { timeout: 180_000 },
       async ({ run }) => {
-        const cwd = createWorkspace(skillRoot, "flag-oidc-misuse__pr-target-mints-aws-token");
+        const cwd = createWorkspace(skillRoot, "flag-oidc-misuse__pr-target-aws-oidc");
         const result = await run("Audit .github/workflows/deploy.yml for security issues.", { metadata: { cwd } });
 
-        await expect(result).toSatisfyJudge(IdentifiesOIDCTokenMintingJudge);
-        await expect(result).toSatisfyJudge(ConnectsUntrustedTriggerToOIDCJudge);
-        await expect(result).toSatisfyJudge(FlagsAudienceOrSubjectClaimJudge);
-        await expect(result).toSatisfyJudge(RatesHighSeverityJudge);
+        expect(toolCalls(result.session)).toEqual(
+          expect.arrayContaining([
+            expect.objectContaining({ name: "read_file", arguments: expect.objectContaining({"path":".github/workflows/deploy.yml"}) }),
+          ]),
+        );
+        await expect(result).toSatisfyJudge(IdentifiesOIDCMisuseJudge);
+        await expect(result).toSatisfyJudge(FlagsAudienceSubjectClaimsJudge);
       },
     );
 
     it(
-      "flag-oidc-misuse__trusted-push-no-finding",
+      "flag-oidc-misuse__chatops-unauth-gcp-oidc",
       { timeout: 180_000 },
       async ({ run }) => {
-        const cwd = createWorkspace(skillRoot, "flag-oidc-misuse__trusted-push-no-finding");
-        const result = await run("Audit .github/workflows/release.yml for security issues.", { metadata: { cwd } });
+        const cwd = createWorkspace(skillRoot, "flag-oidc-misuse__chatops-unauth-gcp-oidc");
+        const result = await run("Review .github/workflows/chatops.yml — anything concerning?", { metadata: { cwd } });
 
-        await expect(result).toSatisfyJudge(DoesNotFlagOIDCInTrustedJobJudge);
+        expect(toolCalls(result.session)).toEqual(
+          expect.arrayContaining([
+            expect.objectContaining({ name: "read_file", arguments: expect.objectContaining({"path":".github/workflows/chatops.yml"}) }),
+          ]),
+        );
+        await expect(result).toSatisfyJudge(IdentifiesOIDCMisuseJudge);
+        await expect(result).toSatisfyJudge(RatesHighSeverityJudge);
       },
     );
   },

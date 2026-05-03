@@ -10,43 +10,60 @@ import { expect } from "vitest";
 import {
   createWorkspace,
   describeEval,
-  skilletHarness,
+  piAiHarness,
+  skilletAgent,
+  skilletTools,
+  toolCalls,
 } from "@sentry/skillet/evals";
 import {
-  ClassifiesAttackerControlledJudge,
+  ClassifiesAttackerControlledFieldJudge,
   ClassifiesTrustedFieldJudge,
-  DistinguishesControllabilityJudge,
-  DoesNotFlagTrustedFieldJudge,
+  DistinguishesCallerVsAttackerJudge,
 } from "./_judges.js";
 
 const skillRoot = dirname(fileURLToPath(import.meta.url)).replace(/\/evals$/, "");
 
 describeEval(
   "investigate-context-fields-for-controllability",
-  { harness: skilletHarness({ skill: skillRoot }), judgeThreshold: 0.75 },
+  {
+    harness: piAiHarness({
+      createAgent: () => skilletAgent({ skillRoot }),
+      tools: skilletTools({ skillRoot }),
+    }),
+    judgeThreshold: 0.75,
+  },
   (it) => {
     it(
-      "investigate-context-fields-for-controllability__mixed-fields",
+      "investigate-context-fields-for-controllability__pr-title-attacker-controlled",
       { timeout: 120_000 },
       async ({ run }) => {
-        const cwd = createWorkspace(skillRoot, "investigate-context-fields-for-controllability__mixed-fields");
-        const result = await run("Audit .github/workflows/triage.yml. For each ${{ github.* }} expression used in a run step, tell me whether it is attacker-controlled, caller-controlled, or trusted, and base any findings on that classification.", { metadata: { cwd } });
+        const cwd = createWorkspace(skillRoot, "investigate-context-fields-for-controllability__pr-title-attacker-controlled");
+        const result = await run("Audit .github/workflows/ci.yml. For each ${{ github.* }} expression you see, tell me whether it is attacker-controlled, caller-controlled, or trusted, and only flag real injection paths.", { metadata: { cwd } });
 
-        await expect(result).toSatisfyJudge(ClassifiesAttackerControlledJudge);
+        expect(toolCalls(result.session)).toEqual(
+          expect.arrayContaining([
+            expect.objectContaining({ name: "read_file", arguments: expect.objectContaining({"path":".github/workflows/ci.yml"}) }),
+          ]),
+        );
+        await expect(result).toSatisfyJudge(ClassifiesAttackerControlledFieldJudge);
         await expect(result).toSatisfyJudge(ClassifiesTrustedFieldJudge);
-        await expect(result).toSatisfyJudge(DistinguishesControllabilityJudge);
-        await expect(result).toSatisfyJudge(DoesNotFlagTrustedFieldJudge);
       },
     );
 
     it(
-      "investigate-context-fields-for-controllability__reusable-input",
+      "investigate-context-fields-for-controllability__reusable-workflow-input-caller-controlled",
       { timeout: 120_000 },
       async ({ run }) => {
-        const cwd = createWorkspace(skillRoot, "investigate-context-fields-for-controllability__reusable-input");
-        const result = await run("Review .github/workflows/deploy.yml — is the inputs.environment value here attacker-controlled, caller-controlled, or trusted? Base your finding on that.", { metadata: { cwd } });
+        const cwd = createWorkspace(skillRoot, "investigate-context-fields-for-controllability__reusable-workflow-input-caller-controlled");
+        const result = await run("Audit .github/workflows/deploy.yml. Classify every ${{ inputs.* }} and ${{ github.* }} field as attacker-controlled, caller-controlled, or trusted, and only report findings tied to a real path.", { metadata: { cwd } });
 
-        await expect(result).toSatisfyJudge(DistinguishesControllabilityJudge);
+        expect(toolCalls(result.session)).toEqual(
+          expect.arrayContaining([
+            expect.objectContaining({ name: "read_file", arguments: expect.objectContaining({"path":".github/workflows/deploy.yml"}) }),
+          ]),
+        );
+        await expect(result).toSatisfyJudge(DistinguishesCallerVsAttackerJudge);
+        await expect(result).toSatisfyJudge(ClassifiesTrustedFieldJudge);
       },
     );
   },
