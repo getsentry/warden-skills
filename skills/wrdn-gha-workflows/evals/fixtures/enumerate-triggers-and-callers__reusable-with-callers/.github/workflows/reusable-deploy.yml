@@ -1,0 +1,18 @@
+name: Reusable Deploy
+on:
+  workflow_call:
+    inputs:
+      target:
+        type: string
+        required: true
+    secrets:
+      DEPLOY_TOKEN:
+        required: true
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: ./deploy.sh ${{ inputs.target }}
+        env:
+          TOKEN: ${{ secrets.DEPLOY_TOKEN }}

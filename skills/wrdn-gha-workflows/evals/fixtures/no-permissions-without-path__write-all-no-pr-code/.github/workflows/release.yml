@@ -1,0 +1,14 @@
+name: Release
+on:
+  push:
+    tags:
+      - 'v*'
+permissions: write-all
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: ./scripts/release.sh
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

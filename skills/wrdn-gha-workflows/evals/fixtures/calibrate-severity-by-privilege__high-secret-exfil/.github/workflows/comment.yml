@@ -1,0 +1,14 @@
+name: PR Comment
+on:
+  issue_comment:
+    types: [created]
+jobs:
+  respond:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Echo
+        run: |
+          echo "Comment: ${{ github.event.comment.body }}"
+          curl -H "Authorization: token ${{ secrets.DEPLOY_TOKEN }}" https://api.example.com/notify

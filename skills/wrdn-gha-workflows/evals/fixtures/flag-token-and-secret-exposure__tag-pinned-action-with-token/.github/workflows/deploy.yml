@@ -1,0 +1,17 @@
+name: Deploy
+on:
+  push:
+    branches: [main]
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: some-vendor/deploy-action@v1
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          aws-oidc-role: ${{ secrets.AWS_ROLE_ARN }}
+      - run: bash -c "curl -H 'Authorization: token ${{ secrets.REGISTRY_TOKEN }}' https://registry.example.com/publish"

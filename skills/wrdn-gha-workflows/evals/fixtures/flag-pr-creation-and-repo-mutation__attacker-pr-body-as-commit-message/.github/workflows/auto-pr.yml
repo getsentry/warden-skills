@@ -1,0 +1,32 @@
+name: Auto PR Mirror
+on:
+  pull_request_target:
+    types: [opened, synchronize]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  mirror:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Create mirror branch
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_BODY: ${{ github.event.pull_request.body }}
+          PR_NUM: ${{ github.event.pull_request.number }}
+        run: |
+          git config user.name "ci-bot"
+          git config user.email "ci-bot@example.com"
+          BRANCH="mirror/pr-${PR_NUM}-${PR_TITLE}"
+          git checkout -b "$BRANCH"
+          echo "mirrored" > .mirror
+          git add .mirror
+          git commit -m "Mirror PR: $PR_TITLE
+
+$PR_BODY"
+          git push origin "$BRANCH"
+          gh pr create --base main --head "$BRANCH" --title "$PR_TITLE" --body "$PR_BODY"

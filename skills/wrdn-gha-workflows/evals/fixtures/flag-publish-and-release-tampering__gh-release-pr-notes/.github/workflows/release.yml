@@ -1,0 +1,21 @@
+name: Release
+on:
+  pull_request_target:
+    types: [closed]
+jobs:
+  release:
+    if: github.event.pull_request.merged == true
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+      - name: Create release
+        run: |
+          gh release create v${{ github.event.pull_request.title }} \
+            --notes "${{ github.event.pull_request.body }}" \
+            --target ${{ github.event.pull_request.head.sha }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -12,13 +12,12 @@ import {
   describeEval,
   piAiHarness,
   skilletAgent,
-  skilletTools,
   toolCalls,
 } from "@sentry/skillet/evals";
 import {
-  DoesNotFlagEphemeralSelfHostedJudge,
   IdentifiesSelfHostedRunnerRiskJudge,
   RatesHighSeverityJudge,
+  RecommendsEphemeralIsolationJudge,
 } from "./_judges.js";
 
 const skillRoot = dirname(fileURLToPath(import.meta.url)).replace(/\/evals$/, "");
@@ -26,23 +25,20 @@ const skillRoot = dirname(fileURLToPath(import.meta.url)).replace(/\/evals$/, ""
 describeEval(
   "flag-self-hosted-runner-exposure",
   {
-    harness: piAiHarness({
-      createAgent: () => skilletAgent({ skillRoot }),
-      tools: skilletTools({ skillRoot }),
-    }),
+    harness: piAiHarness({ agent: skilletAgent({ skillRoot }) }),
     judgeThreshold: 0.75,
   },
   (it) => {
     it(
-      "flag-self-hosted-runner-exposure__pr-checkout-on-self-hosted",
+      "flag-self-hosted-runner-exposure__pr-target-self-hosted",
       { timeout: 120_000 },
       async ({ run }) => {
-        const cwd = createWorkspace(skillRoot, "flag-self-hosted-runner-exposure__pr-checkout-on-self-hosted");
+        const cwd = createWorkspace(skillRoot, "flag-self-hosted-runner-exposure__pr-target-self-hosted");
         const result = await run("Audit .github/workflows/ci.yml for security issues.", { metadata: { cwd } });
 
         expect(toolCalls(result.session)).toEqual(
           expect.arrayContaining([
-            expect.objectContaining({ name: "Read", arguments: expect.objectContaining({"file_path":".github/workflows/ci.yml"}) }),
+            expect.objectContaining({ name: "read_file", arguments: expect.objectContaining({"path":".github/workflows/ci.yml"}) }),
           ]),
         );
         await expect(result).toSatisfyJudge(IdentifiesSelfHostedRunnerRiskJudge);
@@ -51,18 +47,19 @@ describeEval(
     );
 
     it(
-      "flag-self-hosted-runner-exposure__push-only-no-untrusted-path",
+      "flag-self-hosted-runner-exposure__chatops-self-hosted",
       { timeout: 120_000 },
       async ({ run }) => {
-        const cwd = createWorkspace(skillRoot, "flag-self-hosted-runner-exposure__push-only-no-untrusted-path");
-        const result = await run("Audit .github/workflows/release.yml for security issues.", { metadata: { cwd } });
+        const cwd = createWorkspace(skillRoot, "flag-self-hosted-runner-exposure__chatops-self-hosted");
+        const result = await run("Review .github/workflows/deploy.yml — anything concerning?", { metadata: { cwd } });
 
         expect(toolCalls(result.session)).toEqual(
           expect.arrayContaining([
-            expect.objectContaining({ name: "Read", arguments: expect.objectContaining({"file_path":".github/workflows/release.yml"}) }),
+            expect.objectContaining({ name: "read_file", arguments: expect.objectContaining({"path":".github/workflows/deploy.yml"}) }),
           ]),
         );
-        await expect(result).toSatisfyJudge(DoesNotFlagEphemeralSelfHostedJudge);
+        await expect(result).toSatisfyJudge(IdentifiesSelfHostedRunnerRiskJudge);
+        await expect(result).toSatisfyJudge(RecommendsEphemeralIsolationJudge);
       },
     );
   },

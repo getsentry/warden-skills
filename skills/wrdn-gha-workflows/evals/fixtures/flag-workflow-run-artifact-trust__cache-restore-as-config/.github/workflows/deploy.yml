@@ -1,0 +1,25 @@
+name: Deploy
+on:
+  workflow_run:
+    workflows: ["PR Build"]
+    types: [completed]
+jobs:
+  deploy:
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: build-config
+          run-id: ${{ github.event.workflow_run.id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Load deploy config
+        run: |
+          source ./build-config/deploy.env
+          npm install -g $DEPLOY_TOOL
+          $DEPLOY_TOOL push --token $DEPLOY_TOKEN
+        env:
+          DEPLOY_TOKEN: ${{ secrets.DEPLOY_TOKEN }}

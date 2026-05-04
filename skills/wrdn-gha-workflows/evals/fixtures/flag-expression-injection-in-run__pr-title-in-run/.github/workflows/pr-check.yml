@@ -1,0 +1,14 @@
+name: PR Check
+on:
+  pull_request_target:
+    types: [opened, edited, synchronize]
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Greet
+        run: |
+          echo "Processing PR: ${{ github.event.pull_request.title }}"
+          echo "Body: ${{ github.event.pull_request.body }}"

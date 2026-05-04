@@ -1,0 +1,9 @@
+name: PR Deploy
+on:
+  pull_request_target:
+jobs:
+  call:
+    uses: ./.github/workflows/reusable-deploy.yml
+    with:
+      target: ${{ github.event.pull_request.head.ref }}
+    secrets: inherit

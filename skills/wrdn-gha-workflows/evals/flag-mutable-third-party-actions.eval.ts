@@ -12,13 +12,12 @@ import {
   describeEval,
   piAiHarness,
   skilletAgent,
-  skilletTools,
   toolCalls,
 } from "@sentry/skillet/evals";
 import {
-  ConnectsPrivilegedContextJudge,
-  DoesNotFlagSHAPinnedActionJudge,
+  DoesNotFlagFirstPartyActionsJudge,
   IdentifiesMutableActionPinJudge,
+  RecommendsCommitShaPinJudge,
 } from "./_judges.js";
 
 const skillRoot = dirname(fileURLToPath(import.meta.url)).replace(/\/evals$/, "");
@@ -26,19 +25,16 @@ const skillRoot = dirname(fileURLToPath(import.meta.url)).replace(/\/evals$/, ""
 describeEval(
   "flag-mutable-third-party-actions",
   {
-    harness: piAiHarness({
-      createAgent: () => skilletAgent({ skillRoot }),
-      tools: skilletTools({ skillRoot }),
-    }),
+    harness: piAiHarness({ agent: skilletAgent({ skillRoot }) }),
     judgeThreshold: 0.75,
   },
   (it) => {
     it(
-      "flag-mutable-third-party-actions__tag-pin-with-secrets",
+      "flag-mutable-third-party-actions__release-tag-pin",
       { timeout: 120_000 },
       async ({ run }) => {
-        const cwd = createWorkspace(skillRoot, "flag-mutable-third-party-actions__tag-pin-with-secrets");
-        const result = await run("Please review .github/workflows/release.yml for security issues.", { metadata: { cwd } });
+        const cwd = createWorkspace(skillRoot, "flag-mutable-third-party-actions__release-tag-pin");
+        const result = await run("Audit .github/workflows/release.yml for security issues.", { metadata: { cwd } });
 
         expect(toolCalls(result.session)).toEqual(
           expect.arrayContaining([
@@ -46,24 +42,23 @@ describeEval(
           ]),
         );
         await expect(result).toSatisfyJudge(IdentifiesMutableActionPinJudge);
-        await expect(result).toSatisfyJudge(ConnectsPrivilegedContextJudge);
+        await expect(result).toSatisfyJudge(RecommendsCommitShaPinJudge);
       },
     );
 
     it(
-      "flag-mutable-third-party-actions__branch-pin-self-hosted",
+      "flag-mutable-third-party-actions__unprivileged-no-flag",
       { timeout: 120_000 },
       async ({ run }) => {
-        const cwd = createWorkspace(skillRoot, "flag-mutable-third-party-actions__branch-pin-self-hosted");
-        const result = await run("Audit .github/workflows/deploy.yml — anything risky about the third-party actions?", { metadata: { cwd } });
+        const cwd = createWorkspace(skillRoot, "flag-mutable-third-party-actions__unprivileged-no-flag");
+        const result = await run("Audit .github/workflows/lint.yml for security issues.", { metadata: { cwd } });
 
         expect(toolCalls(result.session)).toEqual(
           expect.arrayContaining([
-            expect.objectContaining({ name: "read_file", arguments: expect.objectContaining({"path":".github/workflows/deploy.yml"}) }),
+            expect.objectContaining({ name: "read_file", arguments: expect.objectContaining({"path":".github/workflows/lint.yml"}) }),
           ]),
         );
-        await expect(result).toSatisfyJudge(IdentifiesMutableActionPinJudge);
-        await expect(result).toSatisfyJudge(DoesNotFlagSHAPinnedActionJudge);
+        await expect(result).toSatisfyJudge(DoesNotFlagFirstPartyActionsJudge);
       },
     );
   },

@@ -12,12 +12,11 @@ import {
   describeEval,
   piAiHarness,
   skilletAgent,
-  skilletTools,
   toolCalls,
 } from "@sentry/skillet/evals";
 import {
-  DoesNotLoadIrrelevantReferenceJudge,
-  LoadsMatchingReferenceJudge,
+  ConnectsExploitChainJudge,
+  LoadsRelevantReferenceJudge,
 } from "./_judges.js";
 
 const skillRoot = dirname(fileURLToPath(import.meta.url)).replace(/\/evals$/, "");
@@ -25,10 +24,7 @@ const skillRoot = dirname(fileURLToPath(import.meta.url)).replace(/\/evals$/, ""
 describeEval(
   "load-references-conditionally",
   {
-    harness: piAiHarness({
-      createAgent: () => skilletAgent({ skillRoot }),
-      tools: skilletTools({ skillRoot }),
-    }),
+    harness: piAiHarness({ agent: skilletAgent({ skillRoot }) }),
     judgeThreshold: 0.75,
   },
   (it) => {
@@ -49,24 +45,29 @@ describeEval(
             expect.objectContaining({ name: "read_file", arguments: expect.objectContaining({"path":"references/pwn-requests.md"}) }),
           ]),
         );
-        await expect(result).toSatisfyJudge(LoadsMatchingReferenceJudge);
+        await expect(result).toSatisfyJudge(LoadsRelevantReferenceJudge);
+        await expect(result).toSatisfyJudge(ConnectsExploitChainJudge);
       },
     );
 
     it(
-      "load-references-conditionally__chatops-only",
+      "load-references-conditionally__chatops-pattern",
       { timeout: 120_000 },
       async ({ run }) => {
-        const cwd = createWorkspace(skillRoot, "load-references-conditionally__chatops-only");
-        const result = await run("Review .github/workflows/triage.yml for security issues.", { metadata: { cwd } });
+        const cwd = createWorkspace(skillRoot, "load-references-conditionally__chatops-pattern");
+        const result = await run("Review this workflow for security issues.", { metadata: { cwd } });
 
         expect(toolCalls(result.session)).toEqual(
           expect.arrayContaining([
-            expect.objectContaining({ name: "read_file", arguments: expect.objectContaining({"path":"references/chatops.md"}) }),
+            expect.objectContaining({ name: "read_file", arguments: expect.objectContaining({"path":".github/workflows/chatops.yml"}) }),
           ]),
         );
-        await expect(result).toSatisfyJudge(LoadsMatchingReferenceJudge);
-        await expect(result).toSatisfyJudge(DoesNotLoadIrrelevantReferenceJudge);
+        expect(toolCalls(result.session)).toEqual(
+          expect.arrayContaining([
+            expect.objectContaining({ name: "read_file", arguments: expect.objectContaining({"path":"references/comment-chatops.md"}) }),
+          ]),
+        );
+        await expect(result).toSatisfyJudge(LoadsRelevantReferenceJudge);
       },
     );
   },

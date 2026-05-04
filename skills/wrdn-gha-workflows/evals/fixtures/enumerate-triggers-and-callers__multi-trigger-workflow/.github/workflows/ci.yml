@@ -1,0 +1,21 @@
+name: CI
+on:
+  pull_request_target:
+    types: [opened, synchronize]
+  workflow_dispatch:
+    inputs:
+      env:
+        type: choice
+        options: [staging, prod]
+  schedule:
+    - cron: '0 0 * * *'
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+      - run: npm ci && npm test
+        env:
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}

@@ -11,246 +11,217 @@ managed_by: skillet
 spec_version: 1
 name: wrdn-gha-workflows
 class: security-review
-intent: Find exploitable GitHub Actions workflow defects where CI boundaries turn untrusted or caller-controlled data into code execution, credential exposure, repository mutation, package publication, release tampering, or runner compromise. Trace the chain from trigger or caller to sink to privilege before reporting; this is exploit review, not workflow style.
+intent: "Find exploitable GitHub Actions workflow defects where CI trust boundaries — privileged triggers, reusable workflow callers, or chatops handlers — turn untrusted or caller-controlled data into code execution, credential exposure, repository mutation, package publication, release tampering, or self-hosted runner compromise. The skill is for exploit-path review, not workflow style: every finding must trace trigger or caller → sink → privilege before being reported."
 triggers:
   should:
     - audit these GitHub Actions workflows for security issues
     - review this pull_request_target workflow
     - check this workflow for expression injection
-    - look at the release workflow inputs for injection
-    - review the reusable workflow secrets exposure
-    - scan these composite actions for unsafe shell interpolation
-    - check GHA permissions and token scope on this workflow
-    - find pwn_request style bugs in our CI
-    - review this workflow_run handler for artifact poisoning
-    - is this chatops workflow command-injection safe
-    - audit our self-hosted runner workflow exposure
+    - look at our release workflow inputs for injection
+    - review the secrets exposure in this reusable workflow
+    - scan these composite actions for RCE
+    - are the permissions on this workflow safe
+    - is this chatops workflow exploitable
+    - review GHA workflow_run handler for poisoned artifacts
+    - security review of .github/workflows
   should_not:
-    - add a new CI job to run my tests
+    - add a new CI job that runs tests on PRs
     - explain how GitHub Actions matrix syntax works
-    - format and lint this workflow file
-    - review this Python web app for SQL injection
-    - fix the failing build on main
-    - set up branch protection rules
-    - configure CODEOWNERS for this repo
+    - fix the YAML formatting in this workflow
+    - set up branch protection rules for main
+    - review this Node.js application for security bugs
 behaviors:
   - id: enumerate-triggers-and-callers
-    statement: Enumerate every trigger (`on:` events) and every caller of reusable workflows and composite actions before assessing any step, and label each as trusted or attacker-controlled.
-    rationale: Exploitability begins at the trust boundary; without knowing the entry point, a sink finding is unranked and often wrong.
+    statement: Before reviewing any step, enumerate every workflow trigger and, for reusable workflows, every known caller, and label each as trusted, untrusted, or caller-controlled.
+    rationale: Exploitability is determined by who can invoke the workflow with what data; without this map every downstream judgment is guessing.
     dimensions:
       - exploit-paths
-      - vulnerability-classes
   - id: map-trust-boundaries
-    statement: For each job, identify whether it runs in a trusted context (target repo secrets, write tokens, base ref) or an untrusted context (PR head, fork code), and note transitions caused by `actions/checkout` refs, `workflow_run` downloads, or cache/artifact restores.
-    rationale: Most GHA exploits hinge on a trusted context executing PR-controlled content; the boundary must be explicit before sinks are evaluated.
+    statement: "Map the trust boundary for each job: which steps run with PR-controlled code or inputs, which run with repo secrets or write tokens, and where the boundary is crossed."
+    rationale: Most GHA RCE and secret-exfil bugs live exactly at the step where untrusted content meets a privileged context.
+    dimensions:
+      - exploit-paths
+  - id: resolve-local-actions
+    statement: Resolve referenced local actions, composite actions, reusable workflows, and called scripts from disk and review their steps as part of the same exploit graph.
+    rationale: "Sinks are frequently hidden one or two hops away in `./.github/actions/*` or `uses: ./...` reusable workflows."
     dimensions:
       - exploit-paths
       - vulnerability-classes
-  - id: resolve-local-actions-and-reusable-workflows
-    statement: "Resolve and read every local action (`./path`), composite action, reusable workflow (`uses: ./.github/...` or `org/repo/.github/workflows/x.yml@ref`), and script invoked from `run:` so sinks inside them are analyzed, not assumed safe."
-    rationale: Sinks are routinely hidden one or two indirections deep; skipping resolution produces false negatives and shallow reports.
+  - id: flag-pr-target-checkout-of-pr-head
+    statement: Flag `pull_request_target` (and equivalent privileged `workflow_run`) workflows that check out the PR head ref, run untrusted code from that checkout, or load PR-controlled config/lockfiles into privileged steps.
+    rationale: This is the canonical path from a PR by an external contributor to full repo write access and secret exfiltration.
     dimensions:
-      - exploit-paths
       - vulnerability-classes
+      - exploit-paths
+  - id: flag-workflow-run-artifact-trust
+    statement: Flag privileged `workflow_run` handlers that download artifacts, caches, or build outputs from the triggering run and use them as code, config, or executable inputs without integrity checks.
+    rationale: Artifacts and caches from the upstream run are attacker-controllable when the upstream workflow ran on a fork PR.
+    dimensions:
+      - vulnerability-classes
+      - exploit-paths
   - id: flag-expression-injection-in-run
-    statement: Flag `${{ ... }}` interpolation of attacker-controlled fields (PR title/body, branch name, commit message, issue/comment/discussion body, label name, head ref, author fields) directly into `run:`, composite `run:`, or shell steps as expression injection RCE in the surrounding context.
-    rationale: Direct interpolation into shell is the canonical GHA RCE primitive (`pwn_request`-style); it must be reported with the precise sink and trigger.
+    statement: Flag `${{ ... }}` interpolation of attacker- or caller-controlled fields (PR titles/bodies, branch/ref names, commit messages, issue/comment bodies, head_ref, label names, free-form inputs) directly into `run:` shell, composite shell steps, or interpreter argument strings.
+    rationale: GHA expands expressions before the shell sees them, so any such interpolation in a privileged context is shell injection.
     dimensions:
       - vulnerability-classes
       - exploit-paths
   - id: flag-script-action-injection
-    statement: Flag interpolation of attacker-controlled expressions into `actions/github-script`, `actions/script`, or equivalent JS/Python script bodies, and recommend reading values via `env:` or `context` instead of inline `${{ }}`.
-    rationale: github-script bodies are evaluated as JS; expression interpolation yields code execution with the job's `GITHUB_TOKEN`.
+    statement: Flag interpolation of untrusted fields into `actions/github-script`, `actions/script`, or other inline-JS action `script:` bodies, and require those values to be passed via `env:` and read from `process.env`.
+    rationale: Inline script bodies are templated the same way `run:` is and are equally injectable.
     dimensions:
       - vulnerability-classes
       - remediations
-  - id: flag-workflow-command-file-injection
-    statement: Flag writes of attacker-controlled data to `$GITHUB_ENV`, `$GITHUB_OUTPUT`, `$GITHUB_PATH`, or `$GITHUB_STEP_SUMMARY` without sanitization, and trace whether downstream steps consume the polluted variable in a privileged sink.
-    rationale: Workflow command files allow newline-based injection that mutates env/PATH/outputs across steps, frequently escalating to RCE in later trusted steps.
+  - id: flag-workflow-command-injection
+    statement: Flag untrusted text written to `$GITHUB_OUTPUT`, `$GITHUB_ENV`, `$GITHUB_PATH`, `$GITHUB_STEP_SUMMARY`, or via legacy `::set-output`/`::set-env` without delimiter and content controls.
+    rationale: Newline- or delimiter-bearing inputs can inject environment variables, outputs, or PATH entries consumed by later privileged steps.
     dimensions:
       - vulnerability-classes
       - exploit-paths
-  - id: flag-pull-request-target-checkout-of-pr-head
-    statement: "Flag `pull_request_target` workflows that check out PR head code (`ref: ${{ github.event.pull_request.head.sha }}` or head ref) and then run build, test, install, lint, codegen, or any script from the checkout, as full RCE in the trusted context."
-    rationale: "This is the textbook `pwn_request` pattern: PR-controlled code executes with target repo secrets and write token."
+  - id: trace-inputs-to-sinks
+    statement: For every reported finding, trace the explicit chain from entry point (event field, input, artifact, cache, output) through any intermediate steps to the executing sink, and include that chain in the finding.
+    rationale: Without a traced chain, findings degrade into pattern-matching and produce false positives the reviewer cannot evaluate.
+    dimensions:
+      - exploit-paths
+      - false-positive-controls
+  - id: calibrate-workflow-dispatch
+    statement: Treat `workflow_dispatch` inputs as manual and caller-controlled by default; only escalate to RCE when an external route (e.g. a public chatops workflow, a less-privileged caller, or a low-bar permission) reaches the dispatch.
+    rationale: Most dispatch inputs are typed by maintainers; flagging them as RCE without an external route is the dominant false positive in this class.
+    dimensions:
+      - false-positive-controls
+      - severity-calibration
+  - id: calibrate-choice-inputs
+    statement: "Treat hardcoded `type: choice` / `type: boolean` inputs with shell-safe options as hardening candidates, not automatic RCE, even when interpolated into `run:`."
+    rationale: Choice values cannot carry shell metacharacters from the attacker, so the exploit precondition fails.
+    dimensions:
+      - false-positive-controls
+  - id: review-workflow-call-inputs
+    statement: For `workflow_call`, review every caller's argument plumbing and flag callers that forward attacker-controlled fields into the reusable workflow's shell or script sinks.
+    rationale: A reusable workflow is only as safe as its least-trusted caller; review must include the callers, not just the callee.
+    dimensions:
+      - exploit-paths
+      - vulnerability-classes
+  - id: flag-chatops-without-authorization
+    statement: Flag comment, label, discussion, and chatops workflows that execute commands or mutate the repo without verifying actor association/permission, and flag any that interpolate comment/label/discussion bodies into shells.
+    rationale: Chatops handlers routinely run on every commenter and combine missing authz with raw text interpolation.
     dimensions:
       - vulnerability-classes
       - exploit-paths
-  - id: flag-workflow-run-artifact-and-pr-data-trust
-    statement: Flag privileged `workflow_run` jobs that download artifacts, read PR metadata, or check out PR head from the triggering run and then execute, evaluate, or interpolate that data.
-    rationale: "`workflow_run` runs with full target privileges; trusting artifacts or PR data from the upstream run reintroduces the same exploit path as `pull_request_target`."
-    dimensions:
-      - vulnerability-classes
-      - exploit-paths
-  - id: flag-cache-poisoning-paths
-    statement: Flag privileged jobs that restore caches, dependency lockfiles, or build outputs whose keys can be populated by untrusted PR or fork runs, and trace whether the cached content is later executed.
-    rationale: Cross-context cache restore turns an unprivileged PR run into a code-injection primitive against trusted jobs.
+  - id: flag-token-and-secret-exposure
+    statement: Flag steps that expose `secrets.*`, `GITHUB_TOKEN`, OIDC tokens, PATs, registry tokens, or signing keys to untrusted code, third-party actions pinned by tag, network egress to attacker-controlled hosts, or `pwsh -Command`/`bash -c` strings that include those secrets.
+    rationale: Once attacker-influenced code runs in the same job, anything reachable via env, files, or the runner's token endpoint is exfiltratable.
     dimensions:
       - vulnerability-classes
       - exploit-paths
   - id: flag-mutable-third-party-actions
-    statement: Flag third-party `uses:` references pinned to a branch or mutable tag (e.g. `@main`, `@v1`) in workflows that hold secrets, write tokens, OIDC, publish credentials, or self-hosted runners, and require a commit SHA pin.
-    rationale: A mutable ref lets the action author or a tag-rewrite attack run arbitrary code in a privileged context.
+    statement: In privileged jobs (those with write tokens, secrets, OIDC, or publish capability), flag third-party `uses:` references pinned by branch or tag instead of full commit SHA.
+    rationale: Tag/branch pins let the action owner (or anyone who compromises them) push code into a privileged context.
     dimensions:
       - vulnerability-classes
       - remediations
-  - id: flag-overbroad-permissions-with-traced-sink
-    statement: "Flag `permissions:` grants (especially `contents: write`, `packages: write`, `id-token: write`, `pull-requests: write`) when paired with a traced attacker- or caller-controlled execution path; do not flag broad permissions in isolation."
-    rationale: Permission scope is only a finding when an exploit path can spend it; reporting blanket permissions without a path produces noise.
-    dimensions:
-      - severity-calibration
-      - false-positive-controls
-  - id: flag-secret-and-pat-exposure
-    statement: Flag steps that pass `secrets.*`, PATs, deploy keys, npm/pypi/registry tokens, signing keys, or OIDC-derived credentials into untrusted code paths, log them, write them to artifacts, or expose them via `set-output`/env to later untrusted steps.
-    rationale: Secret exfiltration is a primary impact class; tracing the secret to an untrusted sink is the finding.
-    dimensions:
-      - vulnerability-classes
-      - exploit-paths
-  - id: flag-oidc-misuse
-    statement: "Flag workflows that mint cloud OIDC tokens (`id-token: write`) in jobs reachable by untrusted PR code, fork callers, or unauthenticated chatops, and check the audience/subject claims trusted by the cloud role."
-    rationale: OIDC tokens issued from a compromised job grant cloud access; subject/audience misconfiguration extends blast radius beyond the repo.
-    dimensions:
-      - vulnerability-classes
-      - exploit-paths
   - id: flag-self-hosted-runner-exposure
-    statement: Flag workflows on `self-hosted` runners that accept untrusted code paths (PR head checkout, untrusted `workflow_run`, comment-driven exec) without ephemeral runner guarantees.
-    rationale: Self-hosted runners persist state; one untrusted execution compromises every subsequent job on that runner.
+    statement: Flag self-hosted runner usage on workflows reachable from public PRs, public chatops, or other untrusted triggers, and flag missing ephemeral/isolation guarantees.
+    rationale: Self-hosted runners persist state and network access; untrusted code on them is host compromise, not just CI compromise.
     dimensions:
       - vulnerability-classes
       - severity-calibration
-  - id: flag-chatops-without-authorization
-    statement: Flag `issue_comment`, `pull_request_review`, `discussion_comment`, and label-driven workflows that dispatch privileged actions without an explicit author association or membership check (e.g. `OWNER`, `MEMBER`, `COLLABORATOR`), and flag any that interpolate comment bodies into shell.
-    rationale: Chatops triggers default to anyone on the internet who can comment; missing authorization plus shell interpolation is a remote RCE primitive.
+  - id: flag-publish-and-release-tampering
+    statement: Flag publish, release, tag, and deploy jobs whose inputs (refs, tags, versions, changelog text, release notes) come from caller-controlled or PR-controlled data and reach `npm publish`, registry uploads, `gh release`, signing, or deploy commands.
+    rationale: Release tampering and supply-chain publication are top-severity outcomes and frequently sit behind dispatch or `workflow_call` inputs.
+    dimensions:
+      - vulnerability-classes
+      - severity-calibration
+  - id: flag-pr-creation-and-repo-mutation
+    statement: Flag steps that open PRs, push branches, merge, or write to the repo using `GITHUB_TOKEN` or a PAT where the content, branch name, or commit message is attacker- or caller-controlled.
+    rationale: Repo mutation with a privileged token is a direct path to malicious code landing on protected branches.
     dimensions:
       - vulnerability-classes
       - exploit-paths
-  - id: flag-release-and-publish-input-injection
-    statement: In release, deploy, publish, and PR-creation workflows, flag `workflow_dispatch`/`workflow_call` free-form `string` inputs that flow into `run:`, tag names, version strings, registry commands, or git operations, and assess RCE or supply-chain tampering.
-    rationale: Release pipelines hold the strongest secrets; even caller-controlled inputs become high-impact when they reach shell or publish sinks.
-    dimensions:
-      - vulnerability-classes
-      - exploit-paths
-      - severity-calibration
-  - id: calibrate-workflow-dispatch-severity
-    statement: Treat `workflow_dispatch` and `workflow_call` as manual/caller-controlled by default; raise severity only when an external or lower-trust route reaches the input (reusable workflow called from a public-trigger workflow, repository_dispatch, API exposure).
-    rationale: Prevents false-positive RCE reports on inputs that only a maintainer can supply.
-    dimensions:
-      - severity-calibration
-      - false-positive-controls
-  - id: treat-choice-inputs-as-hardening
-    statement: Treat hardcoded shell-safe `choice` or `boolean` inputs as hardening, not as automatic injection sinks; only flag when a `choice` value is itself shell-unsafe or is concatenated with attacker-controlled data.
-    rationale: Constrained inputs are not exploitable on their own; reporting them as RCE wastes reviewer trust.
-    dimensions:
-      - false-positive-controls
-      - severity-calibration
-  - id: investigate-context-fields-for-controllability
-    statement: For each `${{ github.* }}` or `${{ inputs.* }}` field, determine whether it is attacker-controlled (PR fields, head ref, comment body), caller-controlled (reusable workflow input), or trusted (commit SHA, run id, repository), and base findings on that classification.
-    rationale: Not every context field is dangerous; classification is what separates a real injection from noise.
-    dimensions:
-      - false-positive-controls
-      - exploit-paths
-  - id: check-env-vs-interpolation-mitigation
-    statement: When an attacker-controlled value is read via `env:` and consumed as `"$VAR"` in shell, do not report expression injection on that path; verify quoting and word-splitting before clearing it.
-    rationale: The standard mitigation is `env:` + quoted shell variables; treating it as a finding produces false positives.
-    dimensions:
-      - false-positive-controls
-      - remediations
-  - id: report-with-trace-and-fix
-    statement: "Every finding must include: file:line, trigger/caller entry point, attacker- or caller-controlled input, execution mechanism (sink), privileges exposed (permissions, secrets, runner), impact, confidence, and a concrete fix (env-var pattern, SHA pin, authorization gate, permission narrowing, ephemeral runner)."
-    rationale: Reviewers need an exploit chain and a remediation, not a vague risk label.
+  - id: recommend-env-passing-fix
+    statement: 'For expression-injection findings, prescribe the fix as: pass the untrusted value via `env:` and reference `"$VAR"` (quoted) in shell, or `process.env.VAR` in scripts; never interpolate `${{ ... }}` directly into shell.'
+    rationale: This is the single durable remediation pattern for `run:` and script-action injection.
     dimensions:
       - remediations
-      - exploit-paths
-      - severity-calibration
-  - id: calibrate-severity-by-privilege-and-reach
-    statement: "Calibrate severity by the privileges the exploit reaches: critical for write-token RCE on default branch, secret exfiltration, package publish, or self-hosted runner takeover; high for repo mutation or release tampering; medium for read-token leak or bounded artifact poisoning; low for hardening that lacks a traced sink."
-    rationale: Severity must reflect blast radius; uniform severity collapses signal.
+  - id: recommend-trigger-and-permission-hardening
+    statement: "Recommend the minimum-change hardening for the traced path: replace `pull_request_target` with `pull_request` where feasible, gate privileged work behind label/actor checks on a separate job, drop to least-privilege `permissions:`, and pin third-party actions by full commit SHA."
+    rationale: Reviewers need a concrete, scoped fix tied to the path, not generic policy advice.
+    dimensions:
+      - remediations
+  - id: calibrate-severity-by-privilege
+    statement: "Calibrate severity by the privilege reached: runner/host compromise or publish/release tampering = critical; write-token repo mutation or secret/OIDC exfiltration = high; injection in a no-secret, read-only job = medium; unexploitable patterns = informational."
+    rationale: Severity drives reviewer attention; conflating all expression injection as critical destroys signal.
     dimensions:
       - severity-calibration
+  - id: report-with-required-fields
+    statement: "Report each finding with: file and line, entry point (event/input/caller), attacker- or caller-controlled value, execution mechanism (sink), privileges exposed, impact, confidence, and a concrete fix."
+    rationale: These are the fields a reviewer needs to confirm or dismiss the finding without re-deriving the chain.
+    dimensions:
+      - remediations
+      - false-positive-controls
   - id: load-references-conditionally
-    statement: Based on the workflow patterns observed (pull_request_target, workflow_run, chatops, reusable/release inputs, OIDC, self-hosted runners, third-party actions), load the matching reference file from `references/` before producing findings in that area.
-    rationale: Domain is too broad for one file; conditional loading keeps the working context focused on the patterns actually present.
+    statement: When a workflow shows patterns matching a reference file (privileged triggers, expression-injection sinks, chatops, publish/release jobs, self-hosted runners), load that reference before finalizing findings.
+    rationale: The depth of GHA-specific traps exceeds what fits in SKILL.md; conditional loading keeps the core workflow compact.
     dimensions:
       - vulnerability-classes
 must_not:
-  - id: no-style-or-formatting-findings
-    statement: Do not report YAML formatting, missing `name:`, generic actionlint style, or non-security best practices.
-    rationale: Skill is exploit review; style noise drowns real findings.
-  - id: no-broad-permissions-without-path
-    statement: Do not report broad `permissions:` or privileged triggers without a traced attacker- or caller-controlled execution path.
-    rationale: Permission breadth alone is not an exploit; reporting it as one is false positive.
-  - id: no-vague-resemblance-findings
-    statement: Do not report findings based on resemblance to a known pattern; require a concrete trigger-to-sink trace.
-    rationale: Pattern-matching without tracing produces unranked, unactionable reports.
-  - id: no-rce-claim-on-constrained-inputs
-    statement: Do not claim RCE on `choice`/`boolean` inputs whose values are hardcoded and shell-safe.
-    rationale: Constrained inputs are not exploitable on their own.
-  - id: no-rce-claim-on-env-quoted-pattern
-    statement: Do not claim expression injection when the attacker value is read via `env:` and used as a quoted shell variable, unless quoting is broken or the value reaches a non-shell sink (eval, code, github-script).
-    rationale: That pattern is the recommended mitigation; flagging it erodes trust.
-  - id: no-out-of-scope-app-vulns
-    statement: Do not report standalone application vulnerabilities outside CI unless the vulnerable code is loaded or executed by the workflow under review.
-    rationale: Skill is scoped to GHA exploitability.
-  - id: no-policy-gaps-as-workflow-bugs
-    statement: Do not report missing branch protection, CODEOWNERS, or required-reviewer rules as workflow findings unless the workflow itself creates the exploitable path.
-    rationale: Repo policy is out of scope for workflow exploit review.
-  - id: no-skipping-action-resolution
-    statement: Do not declare a step safe without resolving and reading the local action, composite action, or reusable workflow it invokes.
-    rationale: Sinks frequently live one indirection deep; skipping resolution causes false negatives.
-  - id: no-dispatch-rce-without-external-route
-    statement: Do not escalate `workflow_dispatch` injection to RCE severity unless an external or lower-trust route to the input is identified.
-    rationale: Maintainer-only inputs are not remote exploits.
-  - id: no-cross-skill-handoff
-    statement: Do not instruct the agent to invoke another named skill at runtime; state the intent directly.
-    rationale: Skills must be runtime-independent.
+  - id: no-style-findings
+    statement: Do not report YAML formatting, missing `name:` fields, generic actionlint style issues, or other non-exploit CI hygiene as security findings.
+    rationale: This skill is exploit review; style noise crowds out real findings.
+  - id: no-permissions-without-path
+    statement: Do not report broad `permissions:` or privileged triggers as findings on their own when no attacker- or caller-controlled path to execution or credential exposure is traced.
+    rationale: Privileged context is a precondition for exploitation, not an exploit by itself.
+  - id: no-untraced-resemblance
+    statement: Do not report findings based on vague resemblance to known patterns; if the entry-point-to-sink chain cannot be stated, do not report.
+    rationale: Untraced findings are the dominant false-positive source in GHA review.
+  - id: no-auto-rce-on-dispatch
+    statement: Do not classify `workflow_dispatch` interpolation as RCE absent an external invocation route; report it as caller-controlled hardening at most.
+    rationale: Manual dispatch by maintainers is not an attacker capability.
+  - id: no-rce-on-shell-safe-choice
+    statement: Do not classify interpolation of hardcoded shell-safe `choice`/`boolean` inputs as RCE.
+    rationale: The attacker cannot supply shell metacharacters through a closed enum.
+  - id: no-app-vulns-out-of-ci
+    statement: Do not report vulnerabilities in application code that is not loaded or executed by a workflow under review.
+    rationale: Application security is a different review and a different skill.
+  - id: no-policy-gap-findings
+    statement: Do not report missing branch protection, CODEOWNERS, or required-reviewer policies as workflow findings unless the workflow itself creates the exploitable path.
+    rationale: Org policy gaps are out of scope for workflow exploit review.
+  - id: no-naming-skill-handoffs
+    statement: Do not instruct the agent to invoke other skills by name or hand off to them; state the analysis intent directly.
+    rationale: Runtime dependencies on other skills break when those skills are absent or renamed.
 references:
-  - path: references/pull-request-target-and-workflow-run.md
-    title: pull_request_target and workflow_run exploit patterns
-    load_when: The workflow uses `pull_request_target`, `workflow_run`, or otherwise consumes PR head code, artifacts, or PR metadata in a trusted context.
-    purpose: Document the canonical pwn_request and workflow_run artifact-trust exploit chains, with safe and unsafe checkout patterns.
+  - path: references/privileged-triggers.md
+    title: Privileged triggers and trust boundaries
+    load_when: The workflow uses `pull_request_target`, `workflow_run`, `workflow_call` with privileged callers, or any trigger that grants write tokens or secrets while consuming PR-controlled inputs.
+    purpose: Catalog the trust model for each privileged trigger and the canonical exploit paths from PR-controlled checkout, artifacts, caches, and config.
+    topics:
+      - vulnerability-patterns
+  - path: references/expression-injection.md
+    title: Expression injection sinks and safe-passing patterns
+    load_when: Reviewing `run:` steps, composite shell steps, `actions/github-script`/`actions/script`, or workflow command file writes that touch event fields, inputs, refs, titles, bodies, or labels.
+    purpose: Enumerate sinks where `${{ ... }}` is unsafe, the attacker-controlled fields that reach them, and the env-passing remediation pattern.
     topics:
       - vulnerability-patterns
       - remediations
-  - path: references/expression-injection-sinks.md
-    title: Expression injection sinks and safe interpolation
-    load_when: Any step uses `${{ }}` interpolation in `run:`, composite `run:`, `actions/github-script`, `actions/script`, or writes to `$GITHUB_ENV`/`$GITHUB_OUTPUT`/`$GITHUB_PATH`.
-    purpose: Catalogue interpolation sinks, the env-var mitigation, and workflow-command-file injection variants.
+  - path: references/chatops-and-comment-handlers.md
+    title: Chatops, comment, label, and discussion handlers
+    load_when: The workflow triggers on `issue_comment`, `pull_request_review`, `pull_request_review_comment`, `discussion`, `discussion_comment`, label events, or implements slash-command dispatch.
+    purpose: Cover authorization checks, actor-association gating, and safe handling of comment/label/discussion bodies.
     topics:
       - vulnerability-patterns
-      - remediations
-      - false-positive-traps
-  - path: references/chatops-and-comment-triggers.md
-    title: Chatops, comment, label, and discussion triggers
-    load_when: The workflow triggers on `issue_comment`, `pull_request_review`, `pull_request_review_comment`, `discussion`, `discussion_comment`, or label/assignee events that dispatch privileged actions.
-    purpose: Cover authorization checks (author_association, membership), comment-body interpolation, and slash-command parsing.
+  - path: references/secrets-tokens-and-runners.md
+    title: Secrets, tokens, OIDC, and self-hosted runners
+    load_when: Jobs use `secrets.*`, `GITHUB_TOKEN` with write permissions, OIDC, publish/release/deploy commands, third-party actions in privileged jobs, or self-hosted runners.
+    purpose: Cover credential and runner exposure paths, mutable-action pinning, OIDC misuse, and runner isolation expectations.
     topics:
       - vulnerability-patterns
-      - remediations
-  - path: references/reusable-and-dispatch-inputs.md
-    title: Reusable workflows, workflow_call, and workflow_dispatch inputs
-    load_when: The workflow defines `workflow_call` or `workflow_dispatch`, is called by another workflow, or runs release/publish/PR-creation logic driven by inputs.
-    purpose: Calibrate caller-controlled severity, choice/boolean hardening, and traced paths from public-trigger callers into reusable workflows.
-    topics:
-      - false-positive-traps
-      - remediations
-  - path: references/secrets-oidc-and-tokens.md
-    title: Secrets, GITHUB_TOKEN scope, OIDC, and registry credentials
-    load_when: "The workflow uses `secrets.*`, sets `id-token: write`, publishes packages, signs releases, or pushes to remote registries."
-    purpose: Trace credential flow to untrusted sinks and check OIDC subject/audience constraints.
-    topics:
-      - vulnerability-patterns
-      - remediations
-  - path: references/runners-actions-and-supply-chain.md
-    title: Self-hosted runners, third-party actions, and cache supply chain
-    load_when: The workflow uses `self-hosted` runners, third-party `uses:` references, or restores caches/artifacts that may cross trust boundaries.
-    purpose: Cover ephemeral-runner requirements, SHA pinning, and cache-poisoning paths.
-    topics:
-      - vulnerability-patterns
-      - remediations
   - path: references/false-positive-traps.md
-    title: False-positive traps and severity calibration
-    load_when: Before producing findings, or when uncertain whether a pattern is exploitable or merely non-ideal.
-    purpose: List the recurring traps (env-var mitigation, choice inputs, broad permissions without path, dispatch-only inputs) and severity calibration rules.
+    title: False-positive traps and calibration
+    load_when: About to report a finding involving `workflow_dispatch`, hardcoded `choice` inputs, broad `permissions:`, or untraced resemblance to known patterns.
+    purpose: Document the recurring false-positive shapes for GHA review and the calibration rules that suppress them.
     topics:
       - false-positive-traps
+  - path: references/remediations.md
+    title: Concrete remediations and severity rubric
+    load_when: Writing the fix and severity for any finding.
+    purpose: Provide minimum-change remediation patterns (env-passing, SHA pinning, trigger downgrades, permission scoping, gating jobs) and the privilege-based severity rubric.
+    topics:
       - remediations

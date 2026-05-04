@@ -1,0 +1,22 @@
+name: Deploy
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        type: choice
+        options:
+          - staging
+          - production
+        required: true
+      verbose:
+        type: boolean
+        default: false
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Deploy
+        run: |
+          echo "Deploying to ${{ inputs.environment }}"
+          ./deploy.sh --env ${{ inputs.environment }} --verbose=${{ inputs.verbose }}

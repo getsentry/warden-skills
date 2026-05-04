@@ -1,0 +1,15 @@
+name: ChatOps
+on:
+  issue_comment:
+    types: [created]
+jobs:
+  deploy:
+    if: startsWith(github.event.comment.body, '/deploy')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: refs/pull/${{ github.event.issue.number }}/head
+      - run: ./deploy.sh ${{ github.event.comment.body }}
+        env:
+          DEPLOY_TOKEN: ${{ secrets.DEPLOY_TOKEN }}
