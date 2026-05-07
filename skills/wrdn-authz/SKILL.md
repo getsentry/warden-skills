@@ -81,7 +81,7 @@ Pick the lower level when in doubt and explain why. Over-reporting erodes signal
 Do not report these from this skill:
 
 - **Injection** (SQLi, XSS, SSRF, command injection, template injection).
-- **Pure authentication lifecycle bugs** (login, password reset, session fixation, MFA, account recovery) unless the bug directly feeds a protected authorization decision.
+- **Pure authentication lifecycle bugs** (login, password reset, session fixation, MFA, account recovery) unless the bug directly feeds a protected authorization decision. **IdP/SSO identity claim trust** (trusting IdP email to resolve or link users, orphaned identity reattachment, `email_verified` signal corruption) belongs in `wrdn-idp-claim-trust`.
 - **Crypto primitives** (weak hashes, bad random, ECB) unless the misuse directly enables a permission bypass (e.g., a JWT signed with a predictable secret that grants admin scope).
 - **Secrets in source** (hardcoded API keys, credentials).
 - **Transport** (missing TLS, HSTS, weak ciphers).
