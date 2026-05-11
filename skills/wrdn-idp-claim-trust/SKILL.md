@@ -1,6 +1,6 @@
 ---
 name: wrdn-idp-claim-trust
-description: Detects identity-provider claim-trust flaws in SSO and identity-linking code: privileged writes (auto-login, identity create/rebind, email-verified state) that use forgeable IdP claims (email, email_verified, sub, SAML NameID or attributes) to decide which user the write targets without a session-ownership check or stable-subject anchor, plus per-provider `email_verified` signal corruption (hardcoded true, bool-of-email, non-cryptographic sources). Run on any diff touching SSO callbacks, OAuth/OIDC/SAML handlers, identity-provider adapters, account-linking flows, or auth pipeline state.
+description: "Detects identity-provider claim-trust flaws in SSO and identity-linking code: privileged writes (auto-login, identity create/rebind, email-verified state) that use forgeable IdP claims (email, email_verified, sub, SAML NameID or attributes) to decide which user the write targets without a session-ownership check or stable-subject anchor, plus per-provider email_verified signal corruption (hardcoded true, bool-of-email, non-cryptographic sources). Run on any diff touching SSO callbacks, OAuth/OIDC/SAML handlers, identity-provider adapters, account-linking flows, or auth pipeline state."
 allowed-tools: Read Grep Glob Bash
 ---
 
@@ -94,8 +94,8 @@ Handed off to other skills.
 
 - **Dangling linked identities after deprovisioning** when the orphan is not the RESOLVE mechanism. Pure lifecycle cleanup (unlinked rows, post-uninstall hygiene, AuthProvider deletion races) belongs in a different skill. However, if the orphaned identity record is what lets an attacker RESOLVE to a victim user (e.g., an `AuthIdentity` for a deactivated user gets reattached in a subsequent linking flow), that is an email-forged-write finding and IS in scope. GHSA-ggmg-cqg6-j45g is this shape.
 - **OAuth `state` / PKCE / nonce** missing. Session-fixation and CSRF-on-SSO patterns belong in a session/CSRF skill.
-- **JWT signature bypasses** (`alg: none`, HS/RS confusion, `kid` confusion, bare `jwt.decode`). See `wrdn-access-control`'s `jwt.md`. Only flag here when the signature flaw materially changes the trust-tier classification.
-- **Session fixation at login**. Not rotating the session identifier after `auth.login`. Belongs in `wrdn-access-control`.
+- **JWT signature bypasses** (`alg: none`, HS/RS confusion, `kid` confusion, bare `jwt.decode`). Separate concern. Only flag here when the signature flaw materially changes the trust-tier classification.
+- **Session fixation at login**. Not rotating the session identifier after `auth.login`. Separate concern.
 - **Password-reset / invite / email-change takeover**. Similar primitives, different entry point, different skill.
 - **SSRF on the IdP metadata or JWKS URL**. Data-exfil territory.
 - **`get_or_create` races that create duplicate identities**. Concurrency bug, not claim-trust.

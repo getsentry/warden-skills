@@ -2,7 +2,17 @@
 
 Load when the diff touches OIDC ID-token verification, OAuth userinfo parsing, or identity-linking code using `authlib`, `openid-client`, `oauth2-proxy`, `passport-*` OIDC strategies, `google-auth`, `msal`, or custom verify code.
 
-This reference covers **claim trust for identity linking**. It does not cover `state`/`nonce`/PKCE (session-fixation territory) or JWT signature bypass (see `wrdn-access-control`'s `jwt.md`). The concern here is: given a verified ID-token, which claims can a relying party trust for *which* decision?
+## Contents
+- Stable-Subject vs. Email
+- nOAuth: The Reference Class
+- Which Claims Are Cryptographically Bound?
+- Per-Provider `email_verified` Semantics
+- Bug Shapes
+- Safe Patterns
+- Verification Commands
+- References
+
+This reference covers **claim trust for identity linking**. It does not cover `state`/`nonce`/PKCE (session-fixation territory) or JWT signature bypass (separate concern). The concern here is: given a verified ID-token, which claims can a relying party trust for *which* decision?
 
 ## Stable-Subject vs. Email
 

@@ -2,6 +2,18 @@
 
 Load when the diff touches Django auth, `django-allauth`, `python-social-auth` / `social-auth-app-django`, DRF custom SSO endpoints, `djangosaml2`, or hand-rolled Django OAuth callbacks.
 
+## Contents
+- python-social-auth: `associate_by_email`
+- django-allauth: `SOCIALACCOUNT_AUTO_SIGNUP` and `pre_social_login`
+- `populate_user` vs. `pre_social_login`
+- DRF custom SSO endpoints
+- Staff impersonation / "log in as"
+- `UserEmail.is_verified`
+- Bug Shapes Summary
+- Safe Patterns
+- Verification Commands
+- References
+
 Django's ecosystem has three well-trodden integration points where IdP claim trust goes wrong. Each has a documented footgun and a documented fix; the trick is to recognize which is in play.
 
 ## python-social-auth: `associate_by_email`
@@ -96,7 +108,7 @@ Safe: look up by `(provider, sub)` first; fall through to a session-authenticate
 
 ## Staff impersonation / "log in as"
 
-A separate but adjacent shape: staff tools that use `login(request, target_user)` without a staff-role gate, session binding, or audit logging. Not strictly IdP claim trust, but appears in the same auth code and is worth flagging when you see it. Defer the deep review to `wrdn-access-control`.
+A separate but adjacent shape: staff tools that use `login(request, target_user)` without a staff-role gate, session binding, or audit logging. Not strictly IdP claim trust, but appears in the same auth code and is worth flagging when you see it. Defer the deep review to a separate access-control skill.
 
 ## `UserEmail.is_verified`
 

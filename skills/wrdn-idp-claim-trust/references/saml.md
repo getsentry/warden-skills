@@ -4,6 +4,15 @@ Load when the diff touches SAML assertion parsing, NameID extraction, attribute 
 
 SAML is worse than OIDC in two specific ways: there is no spec-defined `email_verified` equivalent, and the trust model depends on the relying party correctly validating XML signatures against an admin-configured IdP certificate. Both failure modes shift up into claim-trust bugs the moment account linking is in scope.
 
+## Contents
+- The NameID vs. Email Question
+- ruby-saml CVE-2024-45409: The Reference Class
+- Decision Procedure for SAML
+- Bug Shapes
+- Safe Patterns
+- Verification Commands
+- References
+
 This reference covers **claim trust for identity linking**. XML signature wrapping, XXE, and other SAML parser bugs are covered elsewhere; the concern here is: given a validly signed assertion, which attributes can a relying party trust for *which* decision?
 
 ## The NameID vs. Email Question

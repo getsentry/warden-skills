@@ -2,6 +2,16 @@
 
 Load when the diff touches NextAuth.js (v4) or Auth.js (v5) configuration, `signIn` / `jwt` / `session` callbacks, `pages/api/auth/[...nextauth]`, `app/api/auth/[...nextauth]/route.ts`, or custom Next.js Server Actions that handle SSO claims.
 
+## Contents
+- `allowDangerousEmailAccountLinking`
+- The `signIn` Callback
+- Database Session vs. JWT Session Implications
+- Server Actions That Talk to IdPs Directly
+- Bug Shapes
+- Safe Patterns
+- Verification Commands
+- References
+
 Auth.js handles the mechanics of OAuth/OIDC/SAML correctly by default. The claim-trust bugs are almost always in the configuration: a flag flipped to `true`, a `signIn` callback that trusts the IdP, or a Server Action that talks to the IdP directly bypassing the library.
 
 ## `allowDangerousEmailAccountLinking`

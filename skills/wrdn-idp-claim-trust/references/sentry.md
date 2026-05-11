@@ -2,6 +2,15 @@
 
 Load when the diff touches `src/sentry/auth/`, `AuthIdentity`, `AuthProvider`, `handle_attach_identity`, `handle_unknown_identity`, `FLOW_SETUP_PROVIDER`, or identity-linking code in the Sentry auth pipeline.
 
+## Contents
+- The Auth Pipeline
+- The Dangerous Property: `AuthIdentityHandler.user`
+- `handle_attach_identity`
+- `AuthIdentity` Lifecycle
+- `FLOW_SETUP_PROVIDER`
+- Bug Shapes Summary
+- Verification Commands
+
 Sentry's auth system is hand-rolled Django, not allauth or python-social-auth. The patterns in `django.md` do not directly apply. This reference covers Sentry's custom auth pipeline, where the same class of IdP-claim-trust bugs has produced multiple critical account takeovers.
 
 ## The Auth Pipeline

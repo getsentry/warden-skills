@@ -2,6 +2,15 @@
 
 Load when the diff touches Express auth, Passport strategies (`passport-google-oauth20`, `passport-github2`, `passport-saml`, `passport-openidconnect`, `passport-local`, custom strategies), Mongoose/Prisma link tables, or hand-rolled OAuth callbacks in Express/Koa/Fastify/Hono.
 
+## Contents
+- The Passport `verify` Callback
+- nOAuth Class in Passport Shape
+- `profile.emails[0]` Is an Array For a Reason
+- Bug Shapes
+- Safe Patterns
+- Verification Commands
+- References
+
 Passport's strategy model centralizes the dangerous decision in one callback: the `verify` function. Every strategy's `verify` fires after the IdP exchange succeeds, receives a `profile` object built from IdP claims, and returns the local user record that should be logged in. Mistakes here become all-routes-reachable bypasses.
 
 ## The Passport `verify` Callback
