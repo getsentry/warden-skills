@@ -25,7 +25,7 @@ For every candidate finding, walk the trust chain end to end:
 
 - **ENTRY.** Where does the identifier enter the process? SAML ACS view, OAuth callback, OIDC ID-token verify, IdP webhook, pipeline `identity` dict, form POST during SSO setup.
 - **CLAIM.** Which specific field is trusted? `identity["email"]`, `identity["sub"]`, `identity["email_verified"]`, `saml_attrs["NameID"]`, a custom mapping.
-- **RESOLVE.** What turns the claim into a user/linked-identity/email row? Email-based resolvers (`User.get(email=...)`, `UserEmail.filter(email=...)`, `resolve_email_to_user`, Passport `findOrCreate` by profile email) are the smell. Stable-subject resolvers (`LinkedIdentity.get(ident=sub)`, `Identity.get(external_id=sub)`) against an active link are the safe anchor.
+- **RESOLVE.** What turns the claim into a user/linked-identity/email row? Email-based resolvers (`User.get(email=...)`, `UserEmail.filter(email=...)`, `resolve_email_to_user`, Passport `findOrCreate` by profile email) are the smell. Stable-subject resolvers (`LinkedIdentity.get(provider=iss, ident=sub)`, `Identity.get(provider=iss, external_id=sub)`) against an active link are the safe anchor. The lookup must be scoped to the provider; bare `ident` without provider is a cross-IdP collision risk.
 - **WRITE.** What privileged write uses the resolved user? `auth.login`, linked-identity create/update, email-record mark-verified, session `_auth_user_id` assignment, reassigning an existing link's `user_id`.
 - **CLASSIFY.** Apply the two questions. Stable-subject RESOLVE against an active link, or a flow that creates a fresh user: safe, do not flag. Email-based RESOLVE with a session-ownership check between RESOLVE and WRITE: safe. Email-based RESOLVE with no such check, or a check bypassable by reading an IdP-asserted signal like `email_verified`: finding.
 
@@ -105,7 +105,7 @@ If a change is only about one of the above, do not invent an IdP-claim-trust ang
 
 ## False-Positive Traps
 
-1. **Stable-subject match on an active linked identity.** `LinkedIdentity.objects.get(ident=claim_sub)` followed by `login(linked.user)` is safe. The `ident` was written during a prior confirmed link and a rogue IdP cannot forge it. Distinguish "resolve by stable subject" (safe) from "resolve by email" (smell).
+1. **Stable-subject match on an active linked identity.** `LinkedIdentity.objects.get(provider=iss, ident=claim_sub)` followed by `login(linked.user)` is safe. The `(provider, ident)` pair was written during a prior confirmed link and a rogue IdP cannot forge it. The lookup must be scoped to the provider; a bare `ident` match without provider scoping could collide across IdPs. Distinguish "resolve by stable subject" (safe) from "resolve by email" (smell).
 2. **Linked-identity refresh.** Updating `data`, access tokens, or metadata on an existing linked-identity row for the same `ident` is not a rebind. Only flag when `user_id` changes, when a new row is created for an existing sub, or when the sub itself is rewritten.
 3. **New-user signup.** Creating a fresh local user from `identity["email"]` with no pre-existing account to hijack is safe. The attacker gets an account keyed to an email they already control; not a takeover.
 4. **Pre-validated confirmation view.** If the path routes through a framework-provided confirmation handler that re-resolves the user from `request.user` (not from pipeline state) and enforces a confirm POST, the code calling into it is safe. Read the confirmation view before flagging callers.
