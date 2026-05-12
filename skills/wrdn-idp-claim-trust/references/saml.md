@@ -166,12 +166,13 @@ const strategy = new SamlStrategy(
     wantAssertionsSigned: true,
     wantAuthnResponseSigned: true,
     identifierFormat: "urn:oasis:names:tc:SAML:2.0:nameid-format:persistent",
+    passReqToCallback: true,
   },
-  async (profile, done) => {
+  async (req, profile, done) => {
     const link = await db.linkedIdentity.findUnique({
       where: {
         orgId_provider_subject: {
-          orgId: profile.attributes?.orgId,  // resolved from request context, not assertion
+          orgId: req.params.orgId,  // from request URL, not assertion attributes
           provider: "saml",
           subject: profile.nameID,
         },

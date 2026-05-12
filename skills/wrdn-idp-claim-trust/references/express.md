@@ -175,11 +175,10 @@ app.get(
 );
 
 // failureRedirect pattern -- send unauthenticated first-time linkers to login.
+// pendingLinkClaims persists in the session across the login redirect;
+// after login, re-run the OAuth flow so the strategy sees req.user and links.
 app.get("/login", (req, res) => {
-  if (req.query.reason === "link_required") {
-    req.session.pendingLinkClaims = req.session.pendingLinkClaims;   // preserved
-  }
-  res.render("login");
+  res.render("login", { linkPending: req.query.reason === "link_required" });
 });
 
 // After login, re-run the OAuth flow. Strategy now sees req.user and links.
