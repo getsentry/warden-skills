@@ -74,6 +74,8 @@ CPU / throughput exhaustion counts even with no crash: sustained saturation of a
 - Ordinary performance, allocation-count, or style concerns with no attacker-driven unbounded path.
 - AppSec exploitability (injection, XSS, SSRF, auth) — that is the `security-review` skill's job; report it there.
 - A catastrophic-looking regex on a **linear-time engine** (Go `regexp`, Rust `regex`, RE2), or one whose subject is not attacker-influenced, or one already guarded by an input-length cap before the match — not a ReDoS finding.
+- Recursion-depth findings against `serde_json`. It enforces a default recursion limit of 128 on both deserialization and serialization, so "no caller-side depth bound on this `serde_json::from_*` call" is not a finding. The exception dies if the code opts out — the `unbounded_depth` feature plus an explicit `disable_recursion_limit()` call — so check for that before dismissing. The depth limit bounds ONLY stack depth: allocation, output amplification, and CPU-complexity findings involving `serde_json` remain in scope.
+- Input fetched from the Sentry API. Responses served by the Sentry API are considered well formed and not malicious — a size/count/depth field read from a Sentry API response is not attacker-controlled, so sinks fed exclusively from it do not qualify. This covers the API as the source, not as a conduit: if the same sink is also reachable from genuinely untrusted input (uploads, request bodies, external blobs), report it on that path.
 - Pattern-only suspicion. No proof of an attacker-controlled unbounded path, no finding.
 
 ## Finding format
