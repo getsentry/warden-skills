@@ -1,0 +1,21 @@
+name: Label PR
+on:
+  pull_request_target:
+    types: [opened, edited]
+
+permissions:
+  pull-requests: write
+
+jobs:
+  label:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Extract title
+        id: extract
+        run: |
+          echo "title=${{ github.event.pull_request.title }}" >> $GITHUB_OUTPUT
+      - name: Use title
+        run: |
+          echo "PR titled: ${{ steps.extract.outputs.title }}"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

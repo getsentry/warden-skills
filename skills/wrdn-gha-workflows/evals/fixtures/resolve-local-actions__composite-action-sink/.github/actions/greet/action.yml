@@ -1,0 +1,13 @@
+name: Greet
+description: Greets a PR
+inputs:
+  title:
+    description: PR title
+    required: true
+runs:
+  using: composite
+  steps:
+    - name: Say hello
+      shell: bash
+      run: |
+        echo "Hello, ${{ inputs.title }}!"

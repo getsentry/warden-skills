@@ -1,0 +1,12 @@
+name: Manual Deploy
+on:
+  workflow_dispatch:
+    inputs:
+      target:
+        type: string
+jobs:
+  call:
+    uses: ./.github/workflows/reusable-deploy.yml
+    with:
+      target: ${{ inputs.target }}
+    secrets: inherit

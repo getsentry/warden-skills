@@ -1,0 +1,22 @@
+name: PR Check
+on:
+  pull_request_target:
+    types: [opened, edited]
+
+permissions:
+  pull-requests: write
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+      - name: Echo PR title
+        run: |
+          echo "Reviewing PR: ${{ github.event.pull_request.title }}"
+          ./scripts/validate.sh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

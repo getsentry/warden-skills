@@ -1,0 +1,13 @@
+name: Deploy
+on:
+  issue_comment:
+    types: [created]
+jobs:
+  deploy:
+    if: contains(github.event.comment.body, '/deploy')
+    runs-on: self-hosted
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: refs/pull/${{ github.event.issue.number }}/head
+      - run: ./deploy.sh

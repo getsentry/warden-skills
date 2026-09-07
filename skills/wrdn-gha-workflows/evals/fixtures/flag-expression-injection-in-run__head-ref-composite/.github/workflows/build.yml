@@ -1,0 +1,13 @@
+name: Build
+on:
+  pull_request_target:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Log branch
+        shell: bash
+        run: |
+          echo "Building from ${{ github.head_ref }}"
+          git log --oneline ${{ github.head_ref }} | head -5

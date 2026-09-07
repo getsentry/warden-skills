@@ -1,0 +1,14 @@
+name: Reusable Build
+on:
+  workflow_call:
+    inputs:
+      message:
+        required: true
+        type: string
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Print message
+        run: echo "Building with: ${{ inputs.message }}"

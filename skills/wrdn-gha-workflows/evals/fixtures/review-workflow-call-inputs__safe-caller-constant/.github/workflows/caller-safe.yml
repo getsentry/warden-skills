@@ -1,0 +1,9 @@
+name: Safe Caller
+on:
+  push:
+    branches: [main]
+jobs:
+  deploy:
+    uses: ./.github/workflows/reusable-deploy.yml
+    with:
+      environment: production

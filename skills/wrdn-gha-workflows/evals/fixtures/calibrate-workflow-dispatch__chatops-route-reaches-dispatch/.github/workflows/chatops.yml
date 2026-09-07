@@ -1,0 +1,16 @@
+name: ChatOps
+on:
+  issue_comment:
+    types: [created]
+jobs:
+  dispatch:
+    runs-on: ubuntu-latest
+    if: startsWith(github.event.comment.body, '/deploy')
+    steps:
+      - name: Parse and dispatch
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          BODY: ${{ github.event.comment.body }}
+        run: |
+          TARGET=$(echo "$BODY" | awk '{print $2}')
+          gh workflow run deploy.yml -f target="$TARGET"
