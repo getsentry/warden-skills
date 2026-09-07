@@ -1,0 +1,202 @@
+# ──────────────────────────────────────────────────────────
+# Skillet skill spec. Edit this file directly or use the
+# `skillet spec` subcommands — both are supported. Skillet
+# validates this file on read; malformed edits will fail fast
+# with a clear error before doing any work.
+#
+# After editing, run `skillet improve` to refresh SKILL.md and
+# eval cases against the updated spec.
+# ──────────────────────────────────────────────────────────
+managed_by: skillet
+spec_version: 1
+name: wrdn-gha-workflows
+class: security-review
+intent: "Detect exploitable GitHub Actions workflow vulnerabilities where external attackers or lower-privilege workflow callers can turn CI into code execution, credential theft, repository write access, package publication, or runner compromise. The skill is exploit-oriented, not a YAML linter: findings require a chain from external/caller-controlled input to privileged execution, trusted credentials, or trusted runners."
+triggers:
+  should:
+    - Run on diffs touching .github/workflows
+    - Run on diffs touching action.yml or action.yaml
+    - Run on diffs touching repo-local actions
+    - Run on diffs touching CI-loaded scripts and config
+  should_not:
+    - Generic workflow formatting or actionlint issues
+    - Plain pull_request workflows with read-only default token and no secrets
+    - workflow_dispatch or workflow_call with no caller-controlled input reaching a code-evaluating sink
+    - Hardcoded choice/boolean/number inputs used only in non-interpreting contexts
+    - Mutable third-party action refs in workflows handling no secrets and only public read-only data
+    - First-party actions/* and github/* references on a tag
+    - Missing branch protections or CODEOWNERS gaps unrelated to an exploitable workflow path
+behaviors:
+  - id: trace-execution-graph
+    statement: "Trace the full execution graph: identify the trigger, map trust boundaries between base and PR-controlled content, follow uses: into local/composite/reusable callees, track token and secret scope, and verify attacker- or caller-controlled input reaches a code-evaluating sink before reporting."
+    rationale: GitHub Actions bugs hide across files; the finding is the chain from untrusted input to privileged execution, not vague resemblance.
+    dimensions:
+      - exploit-paths
+  - id: report-pwn-request
+    statement: Report when pull_request_target, privileged workflow_run, or equivalent trusted context checks out, builds, tests, imports, executes, or loads files from PR-controlled refs while secrets or write tokens are available.
+    rationale: Privileged PR context consuming PR-controlled code is the canonical pwn-request shape.
+    dimensions:
+      - vulnerability-classes
+      - exploit-paths
+  - id: report-expression-injection
+    statement: "Report attacker- or caller-controlled GitHub context interpolated directly into code-evaluating sinks: run: blocks, composite shell steps, actions/github-script and actions/script bodies, inline -c/-e interpreter flags, and writes to $GITHUB_OUTPUT/$GITHUB_ENV/$GITHUB_STEP_SUMMARY/$GITHUB_PATH."
+    rationale: These sinks evaluate the expansion as code; attacker-controlled values include PR title/body, comment body, branch names, changed filenames, labels, commit messages, and free-form workflow_dispatch/workflow_call string inputs.
+    dimensions:
+      - vulnerability-classes
+      - exploit-paths
+  - id: report-comment-chatops
+    statement: Report issue_comment, label, discussion, or chatops workflows that trigger commands without an authorization gate (author_association MEMBER/OWNER/COLLABORATOR, team check, or required approval) or that interpolate comment/body text into shell or script without safe quoting.
+    rationale: Discussion and comment events are externally triggerable; CVE-2025-53104 shipped a discussion-title shell injection.
+    dimensions:
+      - vulnerability-classes
+      - exploit-paths
+  - id: report-toctou-approval-checkout
+    statement: "Report TOCTOU between approval and checkout: a workflow that resolves pull_request.head.sha or head_ref at execution time after a maintainer /ok-to-test or label approval runs whatever the attacker pushed last, not what the maintainer reviewed. The fix is to pin checkout to the SHA captured at approval."
+    rationale: A maintainer approval is not a SHA pin; the privileged job must use the exact reviewed SHA.
+    dimensions:
+      - vulnerability-classes
+      - exploit-paths
+  - id: report-credential-exposure
+    statement: Report when untrusted execution can access secrets, write-scoped GITHUB_TOKEN, persisted checkout credentials, broad permissions that amplify the attack, derived secrets written to logs/summaries/files/caches/artifacts, broad OIDC trust policies, or actions/upload-artifact paths covering .git/ or home-directory credential files (ArtiPACKED).
+    rationale: Permissions are an amplifier; tie them to the exploit path. GitHub masks exact secret values, not transformations.
+    dimensions:
+      - vulnerability-classes
+      - exploit-paths
+  - id: report-unsafe-reusable-and-local
+    statement: "Report reusable workflows and local/composite actions that hide the dangerous half of the chain: callee executes PR-controlled inputs, callee uses untrusted inputs unquoted, action files sourced from attacker-controlled checkout, runtime download of mutable code, reusable workflows referencing secrets.X without declaring X under workflow_call.secrets, or callees with no permissions: block performing operations narrower than the caller's grant."
+    rationale: "Caller and callee split the chain; secrets: inherit and inherited permissions mask the surface."
+    dimensions:
+      - vulnerability-classes
+      - exploit-paths
+  - id: report-ai-agent-poisoning
+    statement: Report workflows that run AI coding or review agents on PR-controlled content in a privileged context, especially when the PR can modify project-level instructions (AGENTS.md, CLAUDE.md, .cursorrules, .github/copilot-instructions.md), allow non-write users to trigger the agent, or let the agent write/commit/approve while reading PR-controlled instructions.
+    rationale: PR-controlled agent config in a privileged context is a code-execution sink for the agent's tools and tokens.
+    dimensions:
+      - vulnerability-classes
+      - exploit-paths
+  - id: report-cache-artifact-runner-abuse
+    statement: Report attacker-controlled cache keys/contents or artifacts restored into privileged jobs and then executed or trusted, the 10 GiB cache eviction-and-replace pattern, and self-hosted runner use where untrusted code can reach a persistent or sensitive runner.
+    rationale: Cache poisoning, eviction-stuffing, and self-hosted runner abuse are exploited shapes (e.g., Angular dev-infra).
+    dimensions:
+      - vulnerability-classes
+      - exploit-paths
+  - id: report-supply-chain-mutable-refs
+    statement: "Report mutable third-party uses: refs (anything other than a 40-char commit SHA on a third-party owner) sitting in privileged jobs that handle release, deploy, package-publish, signing, token-minting, OIDC, or write-scoped tokens. Drop the finding for first-party actions/*, github/*, and same-repo vendored actions."
+    rationale: CVE-2025-30066 (tj-actions/changed-files) and CVE-2025-30154 (reviewdog/action-setup) demonstrated tag rewrites at scale; unpinned third-party actions in privileged jobs are an exploited shape.
+    dimensions:
+      - vulnerability-classes
+      - exploit-paths
+  - id: state-entry-point
+    statement: For every finding, explicitly state the entry point (external attacker, manual workflow_dispatch caller, or reusable workflow_call caller) and report caller-controlled RCE only when the job has stronger privileges than the caller's ordinary repository rights or handles secrets/PATs/OIDC/publishing/releases/deploys/sensitive runners.
+    rationale: "Threat-model calibration: workflow_dispatch is not external by default and severity depends on the caller versus job privilege delta."
+    dimensions:
+      - severity-calibration
+      - false-positive-controls
+  - id: calibrate-severity
+    statement: "Apply the severity table: high for external-attacker code execution in privileged workflows, secret/token theft, package publication, release tampering, or self-hosted compromise (and equivalent caller-driven RCE in release/deploy/publish/sign/token jobs, and mutable third-party actions in those same jobs); medium for plausible chains needing one verified link, read-only or tightly scoped tokens, manual approval gates, or mutable third-party actions in jobs with non-trivial secrets/OIDC/write tokens; low only for defense-in-depth issues directly adjacent to a reviewed risk. Pick the lower level when in doubt and explain the uncertainty."
+    rationale: Severity must reflect impact and exploitability, not surface YAML shapes.
+    dimensions:
+      - severity-calibration
+  - id: apply-false-positive-controls
+    statement: "Apply the false-positive traps: default checkout under pull_request_target is base code; pull_request is intentionally less privileged; persist-credentials: false does not erase other secrets; permissions: read-all is rarely exploitable alone; reusable workflows inherit context intentionally; artifact upload from untrusted CI is normal absent privileged downstream trust; self-hosted runners may not be public; GitHub masks values not transformations; maintainer approval is not a SHA pin; secrets: inherit masks the surface; workflow_dispatch is not external by default; env: is not magic without quoting; choice inputs narrow the exploit unless bypassable."
+    rationale: Each trap is a documented common false-positive shape.
+    dimensions:
+      - false-positive-controls
+  - id: exclude-non-findings
+    statement: "Do not report YAML style/actionlint issues, pull_request_target workflows that only label or read metadata, expressions in if:/with:/env: that are never reinterpreted, expressions resolving to numeric IDs or full SHAs or base-repo constants, hardcoded choice/boolean/number inputs in non-interpreting contexts, shell-safe choice option sets, mutable third-party refs in jobs without secrets/OIDC/write tokens, first-party actions/* and github/* on tags, secrets in jobs that never run untrusted code, or branch-protection/CODEOWNERS gaps disconnected from an exploitable workflow path."
+    rationale: Out-of-scope shapes are explicitly enumerated to keep the skill exploit-oriented.
+    dimensions:
+      - false-positive-controls
+  - id: recommend-remediations
+    statement: "Recommend concrete fixes: pass untrusted input through env: with shell quoting (printf '%s\\n' \"$VAR\"); use process.env in actions/github-script; constrain workflow_dispatch inputs with type: choice and validate; gate comment/chatops on author_association or team checks; pin checkout to the approved SHA; declare workflow_call.secrets explicitly and pin callee permissions:; disable persist-credentials and upload only intended directories; pin third-party actions to a 40-char commit SHA; use argv arrays and allowlists in scripts and TypeScript actions."
+    rationale: Each canonical pattern pairs the bad shape with a minimal safe patch.
+    dimensions:
+      - remediations
+  - id: output-finding-fields
+    statement: "For every finding include: file and line, entry point, controlled input, execution mechanism, privileges exposed, impact, confidence (high or medium with reason), and a concrete fix as a minimal workflow patch. If no findings, say so and list the workflows/paths reviewed."
+    rationale: Required output structure for actionable, traceable findings.
+    dimensions:
+      - remediations
+  - id: drop-or-medium-when-untraceable
+    statement: If the chain cannot be traced with the files available, either drop the finding or report it as medium confidence with the exact missing link.
+    rationale: Vague resemblance is not a finding.
+    dimensions:
+      - false-positive-controls
+      - severity-calibration
+must_not:
+  - id: no-yaml-lint
+    statement: Do not report generic workflow formatting, actionlint issues, missing names, or YAML style.
+  - id: no-metadata-only-pr-target
+    statement: Do not report pull_request_target workflows that only label, comment, or read metadata and never check out, execute, or load PR-controlled content.
+  - id: no-bare-pull-request
+    statement: Do not report plain pull_request workflows with read-only default token and no secrets, unless they hand unsafe artifacts to a later privileged workflow.
+  - id: no-non-interpreting-expressions
+    statement: "Do not report ${{ }} expressions in if:, with:, or job/step-level env: unless a receiving action or later shell reinterprets the value unsafely."
+  - id: no-safe-resolved-values
+    statement: Do not report expressions that resolve only to numeric IDs, full SHAs, booleans, or base-repository constants.
+  - id: no-dispatch-without-sink
+    statement: Do not report workflow_dispatch, workflow_call, schedule, or protected-branch push risks with no caller-controlled input reaching a code-evaluating sink and no privileged impact.
+  - id: no-hardcoded-choice-non-interpreted
+    statement: "Do not report manual inputs with hardcoded choice, boolean, number, or environment types used only in if:, with:, safely quoted env: variables, or other non-interpreting contexts."
+  - id: no-shell-safe-choice-rce
+    statement: "Do not call hardcoded choice inputs with a shell-safe option set RCE without an actual bypass; recommend env: plus quoting only as hardening."
+  - id: no-public-only-mutable-refs
+    statement: Do not report mutable third-party action refs in workflows that handle no secrets, no OIDC, no write-scoped tokens, and only act on public read-only data, and do not flag first-party actions/* or github/* tag references.
+  - id: no-unreached-secrets
+    statement: Do not report secrets referenced only in jobs that do not run attacker- or caller-controlled code or consume attacker-controlled artifacts.
+  - id: no-policy-gaps-without-path
+    statement: Do not report missing branch protections, required reviewers, CODEOWNERS, or organization policy gaps unless the workflow itself creates an exploitable path.
+  - id: no-vague-resemblance
+    statement: Do not report findings based on vague resemblance when the chain cannot be traced.
+references:
+  - path: references/privileged-pr-context.md
+    title: Privileged PR context
+    load_when: pull_request_target, privileged PR events, or checkout of PR refs appear
+    purpose: Detail pwn-request shapes and safe alternatives for PR-triggered privileged workflows
+    topics:
+      - vulnerability-patterns
+      - exploit-paths
+  - path: references/expression-injection.md
+    title: Expression injection sinks
+    load_when: ${{ }} appears inside run:, composite-action shell steps, actions/github-script, actions/script, workflow_dispatch inputs, or workflow_call inputs
+    purpose: Enumerate code-evaluating sinks and the env:+quoting remediation pattern
+    topics:
+      - vulnerability-patterns
+      - remediations
+  - path: references/comment-commands.md
+    title: Comment and chatops commands
+    load_when: issue_comment, PR comments, slash commands, labels, or chatops trigger execution, including approval-then-checkout flows
+    purpose: Cover authorization gates and TOCTOU between approval and checkout
+    topics:
+      - vulnerability-patterns
+      - exploit-paths
+  - path: references/reusable-and-indirect-flows.md
+    title: Reusable workflows and indirect flows
+    load_when: workflow_call, workflow_run, local actions, composite actions, artifacts, or caches connect workflows
+    purpose: Trace caller/callee splits, undeclared secrets, inherited permissions, and cache/artifact trust
+    topics:
+      - vulnerability-patterns
+      - exploit-paths
+  - path: references/permissions-secrets-runners.md
+    title: Permissions, secrets, and runners
+    load_when: Secrets, PATs, deploy keys, OIDC, package publishing, broad permissions:, secret-bearing artifacts, persisted checkout credentials, or upload-artifact paths that may include .git/ appear
+    purpose: Map credential exposure shapes including ArtiPACKED and self-hosted runner abuse
+    topics:
+      - vulnerability-patterns
+      - exploit-paths
+  - path: references/supply-chain.md
+    title: Supply-chain action references
+    load_when: Third-party or external reusable-workflow refs are mutable (tag, branch, partial SHA), or the workflow handles secrets, package publishing, or trusted release artifacts
+    purpose: Severity tiers and shapes for mutable refs, runtime payload downloads, and workspace-loaded action paths
+    topics:
+      - vulnerability-patterns
+      - severity-calibration
+  - path: references/examples-and-usage.md
+    title: Examples, false-positive controls, and usage
+    load_when: You need examples, false-positive controls, sample Warden config, or eval prompts
+    purpose: Provide worked examples, FP traps, and configuration guidance
+    topics:
+      - false-positive-traps
+      - use-cases
+frontmatter_extras:
+  allowed-tools: Read Grep Glob Bash
