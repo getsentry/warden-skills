@@ -71,8 +71,8 @@ Data that must not be stored:
 
 - Lightweight validation: check frontmatter, relative reference paths, Warden naming, multi-language examples, and the eval prompts in `references/examples-and-usage.md`.
 - Deeper evaluation: run the skill against known pre-fix commits or PR diffs, including Sentry bump-version input injection, Sentry setup-devservices composite input injection, Getsentry `$GITHUB_OUTPUT` expression injection, and Warden release workflow input injection.
-- Holdout examples: safe metadata-only `pull_request_target`, safe constrained manual `choice` input, shell-safe `choice` interpolation with no bypass, read-only workflow with third-party action tag, and caller-controlled reusable workflow with no interpreting sink.
-- Acceptance gates: findings must distinguish external from manual/reusable caller control; input injection findings must identify the code sink and the privilege or runner impact.
+- Holdout examples: safe metadata-only `pull_request_target`, safe constrained manual `choice` input, shell-safe `choice` interpolation with no bypass, read-only workflow with third-party action tag, caller-controlled reusable workflow with no interpreting sink, direct `github.base_ref` interpolation reported low, and `github.sha` plus pull request number reported as no finding.
+- Acceptance gates: findings must distinguish external from manual/reusable caller control; input injection findings must identify the code sink and the privilege or runner impact; a `github.base_ref` finding must be low, must say an external contributor cannot create the base branch, and must not call the bug external RCE.
 
 ## Known Limitations
 

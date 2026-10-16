@@ -4,9 +4,13 @@ This file captures sample Warden configuration, trigger-quality checks, and ligh
 
 ## Sample Warden Config
 
+Low base-ref hygiene is invisible when `reportOn` stays at `medium`. Repos that want that comment on the pull request should report low findings for this skill and keep the check from failing on them:
+
 ```toml
 [[skills]]
 name = "wrdn-gha-workflows"
+failOn = "high"
+reportOn = "low"
 paths = [
   ".github/workflows/**/*.yml",
   ".github/workflows/**/*.yaml",
@@ -82,6 +86,32 @@ Workflow runs on `pull_request`, collects changed files, and loops over `${{ ste
 ### Negative: safe expression context
 
 Workflow uses `${{ github.event.pull_request.number }}` in `run:` and `${{ github.event.pull_request.title }}` only in `if:`. Expected result: no expression-injection finding.
+
+### Low: base ref interpolated into run
+
+Workflow runs on `pull_request` in a private repository. The job has `contents: read` and `pull-requests: write`, no secrets, and no OIDC. A step runs:
+
+```yaml
+- name: Compare what the job reads
+  run: |
+    git fetch --no-tags origin "${{ github.base_ref }}"
+    python scripts/check.py --base "origin/${{ github.base_ref }}"
+```
+
+A second job in the same file uses `github.event.pull_request.base.ref` the same way inside `run:`. Expected result: one low finding covering both direct interpolations. The finding must say an external contributor cannot create the base branch, must not call the bug external RCE, and must show the fix as `env: BASE_REF: ${{ github.base_ref }}` plus `"$BASE_REF"` at the shell use site. Quoting the `${{ }}` expression is not an acceptable fix.
+
+### Negative: sha and pull request number in run
+
+Workflow runs on `pull_request` and contains:
+
+```yaml
+- run: |
+    echo "sha ${{ github.sha }}"
+    echo "pr ${{ github.event.pull_request.number }}"
+    echo "ref ${{ github.ref_name }}"
+```
+
+On this event `github.ref_name` is the merge ref, such as `123/merge`. Expected result: no expression-injection finding for the SHA, the pull request number, or the merge ref.
 
 ### Negative: constrained manual input
 
