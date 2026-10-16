@@ -4,9 +4,13 @@ This file captures sample Warden configuration, trigger-quality checks, and ligh
 
 ## Sample Warden Config
 
+Low base-ref hygiene is invisible when `reportOn` stays at `medium`. Repos that want that comment on the pull request should report low findings for this skill and keep the check from failing on them:
+
 ```toml
 [[skills]]
 name = "wrdn-gha-workflows"
+failOn = "high"
+reportOn = "low"
 paths = [
   ".github/workflows/**/*.yml",
   ".github/workflows/**/*.yaml",
@@ -67,6 +71,10 @@ Workflow uses `pull_request_target` only to label PRs and comment using PR numbe
 
 Workflow runs on `pull_request` and has `run: echo "${{ github.event.pull_request.title }}"`. Expected result: medium or high finding depending on token/secrets impact, with fix to pass through `env` and quote.
 
+### Positive: other fork-controlled ref names
+
+Workflow runs on `pull_request_target` or `workflow_run` and interpolates `${{ github.event.pull_request.head.repo.default_branch }}` or `${{ github.event.workflow_run.head_branch }}` directly into `run:`. Expected result: medium or high expression-injection finding, same class as `github.head_ref`. Do not drop it because the expression is absent from an example list, and do not classify it as the low `github.base_ref` case. A fork author controls the head branch name and the fork's default branch name.
+
 ### Positive: manual workflow input injection
 
 Release workflow runs on `workflow_dispatch`, accepts a free-form string input `bump`, grants release or contents-write permissions, and runs `NEW=$(npx semver -i ${{ inputs.bump }} $CURRENT)`. Expected result: medium or high finding depending on who can trigger it and what credentials are present. The finding should call it manual/caller-controlled command injection, not fork-PR exploitation. Fix is a constrained input type or allowlist plus `env:` and quoted `"$BUMP"`.
@@ -82,6 +90,32 @@ Workflow runs on `pull_request`, collects changed files, and loops over `${{ ste
 ### Negative: safe expression context
 
 Workflow uses `${{ github.event.pull_request.number }}` in `run:` and `${{ github.event.pull_request.title }}` only in `if:`. Expected result: no expression-injection finding.
+
+### Low: base ref interpolated into run
+
+Workflow runs on `pull_request`. The job has `contents: read` and `pull-requests: write`, no secrets, and no OIDC. A step runs:
+
+```yaml
+- name: Compare what the job reads
+  run: |
+    git fetch --no-tags origin "${{ github.base_ref }}"
+    python scripts/check.py --base "origin/${{ github.base_ref }}"
+```
+
+A second job in the same file uses `github.event.pull_request.base.ref` the same way inside `run:`. Expected result: one low finding covering both direct interpolations. The finding must say an external contributor cannot create the base branch, must not call the bug external RCE, and must show the fix as `env: BASE_REF: ${{ github.base_ref }}` plus `"$BASE_REF"` at the shell use site. Quoting the `${{ }}` expression is not an acceptable fix.
+
+### Negative: sha and pull request number in run
+
+Workflow runs on `pull_request` and contains:
+
+```yaml
+- run: |
+    echo "sha ${{ github.sha }}"
+    echo "pr ${{ github.event.pull_request.number }}"
+    echo "ref ${{ github.ref_name }}"
+```
+
+On this event `github.ref_name` is the merge ref, such as `123/merge`. Expected result: no expression-injection finding for the SHA, the pull request number, or the merge ref.
 
 ### Negative: constrained manual input
 

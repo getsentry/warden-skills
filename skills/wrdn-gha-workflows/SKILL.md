@@ -81,7 +81,7 @@ The attacker or caller cannot usually:
 |-------|----------|
 | **high** | External attacker can execute code in a privileged workflow, steal secrets or write-scoped tokens, publish packages, push commits, tamper with releases, or compromise a non-ephemeral self-hosted runner. Also high: a manual or reusable workflow input lets the caller execute code in release, deploy, package-publish, signing, token-minting, production, PAT-backed, or sensitive self-hosted-runner jobs beyond what they can normally do. Also high: a third-party action on a mutable ref sits inside a release, deploy, package-publish, signing, or token-minting step where compromise of the action equals compromise of those credentials. |
 | **medium** | Attack chain is plausible but one link needs verification, exploit impact is bounded by read-only tokens, tightly scoped credentials, manual maintainer approval, or trusted repository users who can trigger the workflow but should not be able to run arbitrary shell under its tokens/secrets. Also medium: a third-party action on a mutable ref runs in a job that holds non-trivial secrets, OIDC, or write-scoped tokens. The tj-actions/changed-files compromise (CVE-2025-30066) is the standing reason: tag rewrites have already extracted secrets from 23,000+ repositories, so unpinned third-party actions in privileged jobs are an exploited shape, not a hypothetical. |
-| **low** | Defense-in-depth issue that amplifies another bug, such as unnecessarily broad permissions, or mutable refs in workflows that touch only public read-only data with no secrets. Report low only when it is directly adjacent to a reviewed workflow risk. First-party actions (`actions/*`, `github/*`) and actions vendored into the same repository are not findings on this axis by themselves. |
+| **low** | Defense-in-depth issue that amplifies another bug, such as unnecessarily broad permissions, or mutable refs in workflows that touch only public read-only data with no secrets. Report those only when directly adjacent to a reviewed workflow risk. Also low, and report it on its own: `github.base_ref` or `github.event.pull_request.base.ref` interpolated directly into a shell or script sink. That is latent shell injection, not external RCE. First-party actions (`actions/*`, `github/*`) and actions vendored into the same repository are not findings on the supply-chain axis by themselves. |
 
 Pick the lower level when in doubt and explain the uncertainty.
 
@@ -112,7 +112,29 @@ Sinks to treat as code execution:
 - `${{ inputs.* }}` or `${{ github.event.inputs.* }}` interpolated directly into shell or script in `workflow_dispatch` or `workflow_call` release, deploy, publish, bump-version, tagging, PR-creation, secret-bearing, or token-bearing jobs. This is highest signal for free-form `string` inputs. Warden PR #277 hardened `npx semver -i ${{ inputs.bump }} $CURRENT`; sentry c50c92f fixed the more clearly injectable `gh pr create --fill ${{ inputs.pr_options }}` free-form option case.
 - `${{ inputs.* }}` interpolated into shell or script inside a composite action that is reachable from an externally triggerable caller (sentry e93ee1ce pulled this out of `setup-devservices`)
 
-Attacker-controlled values include PR title, PR body, issue title, issue body, comment body, review body, discussion title, discussion body, branch names, changed filenames, labels, commit messages, wiki page names, and any action outputs, environment variables, or workflow inputs derived from those values. Manual and reusable workflow inputs are caller-controlled too; free-form string inputs are untrusted in shell and script sinks even when only repository users can trigger them. Numeric IDs, full commit SHAs, repository names, booleans, hardcoded `choice` options, and values created by the base workflow are usually not injectable unless later code reinterprets them unsafely.
+Attacker-controlled values include PR title, PR body, issue title, issue body, comment body, review body, discussion title, discussion body, head-side ref names, changed filenames, labels, commit messages, wiki page names, and any action outputs, environment variables, or workflow inputs derived from those values. Head-side ref names include `github.head_ref`, `github.event.pull_request.head.ref`, `github.event.pull_request.head.label`, `github.event.pull_request.head.repo.default_branch`, `github.event.workflow_run.head_branch`, and the same fields on nested `pull_request` or `workflow_run` payloads. That list is not exhaustive: any ref name a fork author can choose is attacker-controlled. `github.base_ref` and `github.event.pull_request.base.ref` are the low hygiene case below, not this class. Manual and reusable workflow inputs are caller-controlled too; free-form string inputs are untrusted in shell and script sinks even when only repository users can trigger them. Numeric IDs, full commit SHAs, repository names, actor usernames, booleans, hardcoded `choice` options, and values created by the base workflow are usually not injectable unless later code reinterprets them unsafely.
+
+### Base-ref shell hygiene
+
+Report **low** when `github.base_ref` or `github.event.pull_request.base.ref` is expanded directly inside `run:`, a composite-action shell step, `actions/github-script`, `actions/script`, or a workflow command file (`GITHUB_ENV`, `GITHUB_OUTPUT`, `GITHUB_PATH`, `GITHUB_STEP_SUMMARY`). A fallback expression that still contains one of those values counts. Quotes around the `${{ }}` expression do not make it safe: GitHub expands the expression before the shell parses quotes, and a git ref may contain `$`, backticks, `;`, `|`, and quotes.
+
+State all of this in the finding:
+
+- An external contributor cannot create the base branch. The ref must already exist in the base repository, and creating it requires write access.
+- Do not call it external command injection or RCE. Creating the branch requires write access on the base repository.
+- The line is still worth fixing in the same pull request. The same interpolation becomes a higher finding if the job moves to `pull_request_target`, gains secrets, OIDC, or a write token a less-trusted caller can reach, or the expression is replaced with a head ref, title, body, or comment.
+- If the same step also interpolates an externally controlled value, classify by that value. Do not downgrade a head-ref or title injection because `base_ref` is nearby.
+
+Fix by assigning the expression under `env:` and using the quoted shell variable:
+
+```yaml
+env:
+  BASE_REF: ${{ github.base_ref }}
+run: |
+  git fetch --no-tags origin "$BASE_REF"
+```
+
+Stay silent when that value is already passed through `env:` and the shell uses `"$BASE_REF"`. Load `references/expression-injection.md` before reporting. Stay silent on `github.sha`, pull request numbers, `github.actor`, `github.repository`, and a `pull_request` merge ref such as `refs/pull/123/merge`.
 
 ### Comment, label, or chatops command execution
 
@@ -173,7 +195,7 @@ Report mutable third-party action references that sit in privileged jobs. CVE-20
 - `pull_request_target` that only labels, comments, or reads metadata and never checks out, executes, or loads PR-controlled content.
 - Plain `pull_request` workflows with read-only default token and no secrets, unless they hand unsafe artifacts to a later privileged workflow.
 - `${{ }}` expressions in `if:`, `with:`, or job/step-level `env:` unless a receiving action or later shell execution reinterprets the value unsafely.
-- Expressions that resolve only to numeric IDs, full SHAs, booleans, or base-repository constants.
+- Expressions that resolve only to numeric IDs, full SHAs, booleans, or base-repository constants. That includes `github.sha`, `github.event.pull_request.head.sha`, `github.event.pull_request.number`, `github.run_id`, `github.run_number`, `github.run_attempt`, `github.actor`, `github.repository`, `github.repository_owner`, and `github.ref` / `github.ref_name` on `pull_request` when the value is the merge ref (`refs/pull/<n>/merge` or `<n>/merge`).
 - `workflow_dispatch`, `workflow_call`, `schedule`, or protected-branch `push` risks with no caller-controlled input reaching a code-evaluating sink and no privileged impact.
 - Manual inputs with hardcoded `choice`, `boolean`, `number`, or `environment` types used only in `if:`, `with:`, safely quoted `env:` variables, or other non-interpreting contexts.
 - Hardcoded `choice` inputs whose complete option set is shell-safe, even if directly interpolated into a command, unless another path can supply arbitrary values or the command reinterprets the option as code. Recommend `env:` plus quoting as hardening, but do not call it RCE without the bypass.
@@ -196,6 +218,7 @@ Report mutable third-party action references that sit in privileged jobs. CVE-20
 11. **`workflow_dispatch` is not external by default.** Do not call it fork-exploitable unless a public path triggers it. Report it as manual/caller-controlled, calibrate severity to the caller and job privilege, and still flag arbitrary command execution in release or secret-bearing jobs.
 12. **`env:` is not magic.** The fix is `env:` plus native shell/script variable access and safe quoting or validation. `echo '${{ env.BODY }}'` is still expression injection.
 13. **`choice` inputs narrow the exploit.** A direct `${{ inputs.bump }}` in `run:` is still poor shell hygiene, but `type: choice` with only `minor`, `patch`, and `major` is not the same as free-form command injection. Verify whether API dispatch, a caller workflow, or a later refactor can bypass the finite set before reporting.
+14. **`github.base_ref` is a real shell sink and a weak attacker source.** A branch name can contain shell metacharacters, and `"${{ github.base_ref }}"` is still expanded before the shell runs. An external contributor cannot create that branch. Report low hygiene with the `env:` fix. Do not report external RCE.
 
 ## Canonical Patterns
 
