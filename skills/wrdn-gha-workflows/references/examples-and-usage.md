@@ -93,7 +93,7 @@ Workflow uses `${{ github.event.pull_request.number }}` in `run:` and `${{ githu
 
 ### Low: base ref interpolated into run
 
-Workflow runs on `pull_request` in a private repository. The job has `contents: read` and `pull-requests: write`, no secrets, and no OIDC. A step runs:
+Workflow runs on `pull_request`. The job has `contents: read` and `pull-requests: write`, no secrets, and no OIDC. A step runs:
 
 ```yaml
 - name: Compare what the job reads

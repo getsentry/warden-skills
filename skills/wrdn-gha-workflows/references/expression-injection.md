@@ -63,7 +63,7 @@ Why it is low, and why it is still a finding:
 
 - Git ref rules allow `$`, backticks, `;`, `|`, and quotes. They reject spaces, newlines, and `~^:?*[\`. The character set is enough for command substitution.
 - `"${{ github.base_ref }}"` inside `run:` is still injection. Expansion happens before the shell parses the quotes.
-- An external contributor cannot create the base branch. The name has to already exist in the base repository. Creating it requires write access. In a private repository that write access already includes the job's secrets and tokens, so the injection grants nothing new to that user.
+- An external contributor cannot create the base branch. The name has to already exist in the base repository. Creating it requires write access.
 - Do not describe the finding as external RCE. Describe it as latent shell injection. The same line becomes medium or high if the job later uses `pull_request_target`, holds secrets, OIDC, or a write token a less-trusted caller can reach, or the expression is changed to a head ref, title, body, or comment.
 - If the same step also interpolates an externally controlled value, classify by that value.
 

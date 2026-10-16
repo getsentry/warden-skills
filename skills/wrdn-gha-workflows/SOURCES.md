@@ -202,12 +202,12 @@ Further retrieval is low-yield for this iteration. The referenced Warden PR, Sen
 
 ## 2026-10-16 update, base-ref shell hygiene
 
-Semgrep `run-shell-injection` files any `github.*` expression inside `run:` as high. GitHub's untrusted-input list does not include `github.base_ref`. A private-repo `pull_request` workflow that interpolates `github.base_ref` and `github.event.pull_request.base.ref` directly into `git fetch` is real shell syntax and not an external exploit: the branch must already exist, and creating it requires write access.
+Semgrep `run-shell-injection` files any `github.*` expression inside `run:` as high. GitHub's untrusted-input list does not include `github.base_ref`. A `pull_request` workflow that interpolates `github.base_ref` and `github.event.pull_request.base.ref` directly into `git fetch` is real shell syntax and not an external exploit: the branch must already exist, and creating it requires write access.
 
 | Decision | Status | Rationale |
 |----------|--------|-----------|
 | Report direct `github.base_ref` and `github.event.pull_request.base.ref` interpolation as low, on its own. | adopted | The character set of a git ref can include shell metacharacters, and expression expansion happens before the shell parses quotes. The finding is latent injection worth fixing in the same pull request. |
-| Do not call that shape external RCE. | adopted | An external contributor cannot create the base branch. A write user who can already has the job's privileges in a private repository. |
+| Do not call that shape external RCE. | adopted | An external contributor cannot create the base branch. Creating it requires write access. |
 | Stay silent on `github.sha`, pull request numbers, run IDs, `github.actor`, `github.repository`, and `pull_request` merge refs. | adopted | Those values are not shell payloads. Matching Semgrep here recreates the vuln queue inside pull request review. |
 | Keep head refs, titles, bodies, comments, and free-form workflow inputs on the existing medium/high path. | adopted | Those sources are attacker-controlled or caller-controlled. A nearby `base_ref` must not downgrade them. |
 | Document `reportOn = "low"` and `failOn = "high"` on this skill. | adopted | A low finding is invisible when the consumer's `reportOn` stays at `medium`. The check should stay green. |

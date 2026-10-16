@@ -121,7 +121,7 @@ Report **low** when `github.base_ref` or `github.event.pull_request.base.ref` is
 State all of this in the finding:
 
 - An external contributor cannot create the base branch. The ref must already exist in the base repository, and creating it requires write access.
-- Do not call it external command injection or RCE. A write user who can create that branch already has the access the injection would grant in a private repository.
+- Do not call it external command injection or RCE. Creating the branch requires write access on the base repository.
 - The line is still worth fixing in the same pull request. The same interpolation becomes a higher finding if the job moves to `pull_request_target`, gains secrets, OIDC, or a write token a less-trusted caller can reach, or the expression is replaced with a head ref, title, body, or comment.
 - If the same step also interpolates an externally controlled value, classify by that value. Do not downgrade a head-ref or title injection because `base_ref` is nearby.
 
