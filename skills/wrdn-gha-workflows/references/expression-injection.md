@@ -16,9 +16,12 @@ Treat these as untrusted when the trigger is externally reachable, manually trig
 - `github.event.pull_request.body`
 - `github.event.pull_request.head.ref`
 - `github.event.pull_request.head.label`
+- `github.event.pull_request.head.repo.default_branch`
 - `github.head_ref`
+- `github.event.workflow_run.head_branch`
+- `github.event.workflow_run.head_repository.default_branch`
 
-Head branch names are attacker-controlled. Base branch names are not. See the base-ref section below.
+These are examples of fork-controlled ref names, not a closed list. The same head-ref fields on nested `pull_request` or `workflow_run` payloads are attacker-controlled too. A fork author chooses the head branch name and can also rename the fork's default branch, so `head.repo.default_branch` is a payload. Base refs (`github.base_ref`, `github.event.pull_request.base.ref`) are the low hygiene class below.
 - `github.event.issue.title`
 - `github.event.issue.body`
 - `github.event.comment.body`
